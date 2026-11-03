@@ -4,18 +4,30 @@ rem Put MinGW-w64 in .\compiler so that .\compiler\bin\g++.exe exists BEFORE run
 
 cd /d "%~dp0"
 
+rem Find a real Python (skip the Microsoft Store stub that makes "python" fail)
+set "PY="
+py -3 -c "import sys" >nul 2>&1 && set "PY=py -3"
+if not defined PY (
+  python -c "import sys" >nul 2>&1 && set "PY=python"
+)
+if not defined PY (
+  echo [ERROR] Python 3.10+ not found. Install it from python.org, then run this again.
+  goto fail
+)
+
 if not exist compiler\bin\g++.exe (
   echo [WARNING] compiler\bin\g++.exe not found. The app will be built without a bundled compiler.
   echo           Students would need g++ in PATH. See README.md.
   pause
 )
 
-python -m pip install -r requirements.txt
+%PY% -m pip install -r requirements.txt
 if errorlevel 1 goto fail
 
-python -m PyInstaller --noconfirm --clean --windowed --name CppLearn main.py
+%PY% -m PyInstaller --noconfirm --clean --windowed --icon assets\icon.ico --name CppLearn main.py
 if errorlevel 1 goto fail
 
+xcopy /E /I /Y assets dist\CppLearn\assets >nul
 if exist compiler (
   xcopy /E /I /Y compiler dist\CppLearn\compiler >nul
 )

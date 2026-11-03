@@ -16,7 +16,7 @@ from .console import ConsoleWidget
 from .editor import CodeEditor
 from .examples import DEFAULT_CODE, EXAMPLES
 
-APP_NAME = "CppLearn"
+APP_NAME = "Cpp-Kub"
 FILTER = "ไฟล์ C++ (*.cpp *.cc *.cxx *.h *.hpp);;ทุกไฟล์ (*)"
 
 DARK_QSS = """
@@ -410,11 +410,13 @@ class MainWindow(QMainWindow):
     def _about(self) -> None:
         QMessageBox.about(
             self, APP_NAME,
-            "<b>CppLearn</b> — โปรแกรมเขียน C++ สำหรับการเรียนการสอน<br><br>"
+            "<b>Cpp-Kub</b> — โปรแกรมเขียน C++ สำหรับการเรียนการสอน<br><br>"
             "• พิมพ์โค้ดและข้อมูลนำเข้าเป็นภาษาไทยได้ (UTF-8)<br>"
             "• อธิบายข้อผิดพลาดของคอมไพเลอร์เป็นภาษาไทย<br>"
-            "• พิมพ์โค้ดและผลลัพธ์ หรือส่งออกเป็น PDF ได้<br>"
-            "• ใช้งานออฟไลน์ได้ทั้งหมด")
+            "• พิมพ์โค้ดและผลลัพธ์ หรือส่งออกเป็น PDF ได้ <br>"
+            "• ใช้งานออฟไลน์ได้ทั้งหมด <br>"
+            "• By : Cerebrega.com <br>"
+            "• Mail : info@cerebrega.com")
 
     def closeEvent(self, e) -> None:
         if self._confirm_discard():

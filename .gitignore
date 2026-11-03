@@ -1,0 +1,15 @@
+# ตัวคอมไพล์ที่แพ็กมากับโปรแกรม (ขนาดใหญ่ ดาวน์โหลดแยก ดู README)
+compiler/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# ไฟล์ที่ได้จากการ build / รันโปรแกรม
+build/
+dist/
+*.spec
+work/

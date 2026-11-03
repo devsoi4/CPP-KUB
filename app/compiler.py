@@ -220,6 +220,7 @@ class Runner(QObject):
 
     def _on_compile_timeout(self) -> None:
         if self.is_compiling:
+            self._cc_cancelled = True    # กัน compile_done ซ้ำหลัง kill
             self._cc.kill()
             self.problem.emit("คอมไพล์นานเกินไป จึงยกเลิก")
 
