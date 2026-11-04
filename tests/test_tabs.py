@@ -110,3 +110,71 @@ def test_current_document_changed_signal(tabs):
     tabs.remove_document(a)
     tabs.remove_document(b)
     assert got[-1] is None
+
+
+# ---------- แถบข้าง ----------
+def _group(explorer, title):
+    root = explorer.tree.invisibleRootItem()
+    return next(root.child(i) for i in range(root.childCount()) if root.child(i).text(0).startswith(title))
+
+
+def test_explorer_lists_all_examples(qapp):
+    from app.examples import EXAMPLES
+    from app.sidebar import Explorer
+    ex = Explorer()
+    g = _group(ex, "ตัวอย่างโค้ด")
+    assert [g.child(i).text(0) for i in range(g.childCount())] == [t for t, _ in EXAMPLES]
+
+
+def test_example_click_emits_title(qapp):
+    from app.examples import EXAMPLES
+    from app.sidebar import Explorer
+    ex = Explorer()
+    got = []
+    ex.example_requested.connect(got.append)
+    item = _group(ex, "ตัวอย่างโค้ด").child(1)
+    ex.tree.itemClicked.emit(item, 0)
+    assert got == [EXAMPLES[1][0]]
+
+
+def test_open_documents_click_emits_document(qapp):
+    from app.sidebar import Explorer
+    ex = Explorer()
+    a, b = Document(untitled_no=1), Document(untitled_no=2)
+    ex.set_documents([a, b], b)
+    g = _group(ex, "ไฟล์ที่เปิดอยู่")
+    assert [g.child(i).text(0) for i in range(2)] == ["ไม่มีชื่อ-1", "ไม่มีชื่อ-2"]
+    got = []
+    ex.document_requested.connect(got.append)
+    ex.tree.itemClicked.emit(g.child(0), 0)
+    assert got == [a]
+
+
+def test_folder_lists_only_cpp_files(qapp, tmp_path):
+    from app.sidebar import Explorer
+    for n in ("a.cpp", "b.h", "c.txt", "ทดสอบ.cpp"):
+        (tmp_path / n).write_text("", encoding="utf-8")
+    ex = Explorer()
+    ex.set_folder(str(tmp_path))
+    g = _group(ex, "โฟลเดอร์งาน")
+    assert sorted(g.child(i).text(0) for i in range(g.childCount())) == sorted(["a.cpp", "b.h", "ทดสอบ.cpp"])
+    got = []
+    ex.open_path_requested.connect(got.append)
+    ex.tree.itemClicked.emit(g.child(0), 0)
+    assert got and Path(got[0]).parent == tmp_path
+
+
+def test_missing_folder_is_empty_not_error(qapp, tmp_path):
+    from app.sidebar import Explorer
+    ex = Explorer()
+    ex.set_folder(str(tmp_path / "gone"))
+    assert _group(ex, "โฟลเดอร์งาน").childCount() == 0
+
+
+def test_activity_toggle_emits(qapp):
+    from app.sidebar import ActivityBar
+    bar = ActivityBar()
+    got = []
+    bar.explorer_toggled.connect(got.append)
+    bar.explorer_btn.click()
+    assert got == [False]       # เริ่มต้นเปิดอยู่ คลิกแล้วปิด
