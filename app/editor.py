@@ -10,6 +10,8 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QPlainTextEdit, QTextEdit, QWidget
 
+from . import theme
+
 KEYWORDS = (
     "alignas alignof auto bool break case catch char class const constexpr continue "
     "default delete do double else enum explicit extern false float for friend goto if "
@@ -129,6 +131,7 @@ class CodeEditor(QPlainTextEdit):
         self.setTabStopDistance(self.fontMetrics().horizontalAdvance(" ") * 4)
         self.setAcceptDrops(True)
         self._error_lines: dict[int, str] = {}   # เลขบรรทัด → "error"/"warning"
+        self._debug_line: int | None = None      # บรรทัด (เริ่มที่ 1) ที่ดีบักเกอร์หยุดอยู่
         self._area = _LineNumberArea(self)
         self.highlighter = CppHighlighter(self.document())
         self.blockCountChanged.connect(self._update_margin)
@@ -159,6 +162,26 @@ class CodeEditor(QPlainTextEdit):
 
     def clear_diagnostics(self) -> None:
         self.set_diagnostics({})
+
+    # ---------- ตัวช่วยมองเห็นการทำงาน (ดีบัก) ----------
+    @property
+    def debug_line(self) -> int | None:
+        return self._debug_line
+
+    def set_debug_line(self, line: int | None) -> None:
+        self._debug_line = line
+        if line is not None:
+            block = self.document().findBlockByNumber(max(0, line - 1))
+            if block.isValid():
+                self.setTextCursor(QTextCursor(block))
+                self.centerCursor()
+        self._refresh_extra()
+        self._area.update()
+
+    def set_debug_mode(self, on: bool) -> None:
+        self.setReadOnly(on)
+        if not on:
+            self.set_debug_line(None)
 
     def goto_line(self, line: int) -> None:
         block = self.document().findBlockByNumber(max(0, line - 1))
@@ -200,7 +223,10 @@ class CodeEditor(QPlainTextEdit):
         while block.isValid() and top <= event.rect().bottom():
             if block.isVisible() and bottom >= event.rect().top():
                 kind = self._error_lines.get(num + 1)
-                if kind == "error":
+                if num + 1 == self._debug_line:
+                    p.setPen(QColor(theme.palette(self.dark)["accent"]))
+                    p.drawText(2, top, 14, self.fontMetrics().height(), Qt.AlignCenter, "▶")
+                elif kind == "error":
                     p.setPen(QColor("#f85149"))
                     p.drawText(2, top, 14, self.fontMetrics().height(), Qt.AlignCenter, "●")
                 elif kind == "warning":
@@ -237,6 +263,14 @@ class CodeEditor(QPlainTextEdit):
             s.format.setProperty(QTextFormat.FullWidthSelection, True)
             s.cursor = QTextCursor(block)
             extras.append(s)
+        if self._debug_line is not None:
+            block = self.document().findBlockByNumber(self._debug_line - 1)
+            if block.isValid():
+                s = QTextEdit.ExtraSelection()
+                s.format.setBackground(QColor(theme.palette(self.dark)["debug_line"]))
+                s.format.setProperty(QTextFormat.FullWidthSelection, True)
+                s.cursor = QTextCursor(block)
+                extras.append(s)
         self.setExtraSelections(extras)
 
     # ---------- การพิมพ์ ----------

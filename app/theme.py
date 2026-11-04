@@ -6,12 +6,14 @@ _LIGHT = dict(
     text="#1f2328", muted="#656d76", accent="#0969da", accent_text="#ffffff",
     hover="#e6ebf1", tab_active="#ffffff", tab_inactive="#eaeef2",
     danger="#cf222e", warn="#9a6700", ok="#1a7f37",
+    debug_line="#fff3b0", changed="#ffe9a8",
 )
 _DARK = dict(
     bg="#0d1117", panel="#161b22", sidebar="#11161d", border="#30363d",
     text="#e6edf3", muted="#8b949e", accent="#1f6feb", accent_text="#ffffff",
     hover="#21262d", tab_active="#0d1117", tab_inactive="#161b22",
     danger="#ff7b72", warn="#e3b341", ok="#56d364",
+    debug_line="#4a4220", changed="#5a4a12",
 )
 
 
