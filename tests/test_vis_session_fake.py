@@ -36,6 +36,14 @@ for raw in sys.stdin:
         if os.environ.get("FAKE_GDB_SILENT"):
             continue
         out('*stopped,reason="breakpoint-hit",frame={func="main",file="main.cpp",line="3"}')
+    elif cmd.startswith("-exec-continue") and os.environ.get("FAKE_GDB_WIN_CRASH"):
+        # Windows: SIGSEGV แจ้ง 2 รอบ (first/second chance) แล้วรอบที่ 3 โปรแกรมจึงจบ
+        out(tok + "^running")
+        step["n"] += 1
+        if step["n"] <= 2:
+            out('*stopped,reason="signal-received",signal-name="SIGSEGV",frame={func="main",file="main.cpp",line="3"}')
+        else:
+            out('*stopped,reason="exited-signalled",signal-name="SIGSEGV"')
     elif cmd.startswith("-exec-next") or cmd.startswith("-exec-continue"):
         out(tok + "^running")
         step["n"] += 1
@@ -226,6 +234,22 @@ def test_exec_error_frees_the_session(qapp, fake_gdb, monkeypatch):
         assert "Cannot finish" in errors[0]
         assert r.session.busy is False and r.session.active is True
         r.step("step_over")                                  # ยังเดินต่อได้
+    finally:
+        r.session.stop()
+
+
+@needs_gpp
+def test_second_chance_signal_is_skipped_and_resume_ends_as_crash(qapp, fake_gdb, monkeypatch):
+    monkeypatch.setenv("FAKE_GDB_WIN_CRASH", "1")
+    r = Rec(Runner())
+    try:
+        r.start(LOOP_SRC)
+        r.session.resume()
+        assert wait_until(lambda: any(sn.signal for sn in r.snaps))
+        r.session.resume()                                   # กดครั้งเดียวต้องจบ ไม่หยุดซ้ำที่ SIGSEGV เดิม
+        assert wait_until(lambda: r.fin)
+        assert r.fin == [(0, "crash")]
+        assert sum(1 for sn in r.snaps if sn.signal) == 1
     finally:
         r.session.stop()
 

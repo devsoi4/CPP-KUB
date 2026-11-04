@@ -308,7 +308,7 @@ class DebugSession(QObject):
         except OSError:
             return
         self._out_pos += len(data)
-        text = self._dec.decode(data)
+        text = self._dec.decode(data).replace("\r", "")   # ไฟล์เขียนแบบ text mode บน Windows (\r\n) — ตัดเหมือน Runner
         if text:
             self.output.emit(text)
 
@@ -321,6 +321,12 @@ class DebugSession(QObject):
             return
         frame = data.get("frame", {}) or {}
         in_user = Path(frame.get("file", "") or frame.get("fullname", "")).name.lower() == SRC_NAME
+        if reason == "signal-received" and self._crashed:
+            # Windows: gdb แจ้ง exception ซ้ำอีกรอบ (second chance) หลังสั่งเดินต่อ — รันต่อให้โปรแกรมจบเป็น crash
+            self._busy = True
+            self._arm_timer()
+            self._enqueue("-exec-continue", self._on_exec_result)
+            return
         if reason == "signal-received":
             self._signal = data.get("signal-name", "SIGSEGV")
             self._crashed = True
