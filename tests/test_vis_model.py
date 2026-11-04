@@ -127,3 +127,59 @@ def test_snapshot_properties():
     s = _snap("0", "20")
     assert (s.line, s.func, s.file) == (5, "main", "main.cpp")
     assert (Snapshot([]).line, Snapshot([]).func) == (0, "")
+
+
+# ---------- หาว่า pointer ชี้ไปที่ตัวแปรไหน (งานที่ 10) ----------
+from app.visualizer.model import PointsTo, resolve_pointer_targets  # noqa: E402
+
+
+def _ptr_snapshot():
+    x = Var("x", "int", "5", address=0x100, size=4)
+    a = Var("a", "int [3]", "{1, 2, 3}", kind="array", address=0x200, size=12,
+            children=[Var(f"[{i}]", "int", str(i + 1)) for i in range(3)])
+    p = Var("p", "int *", "0x100", kind="pointer", target=0x100, address=0x300, size=8)
+    q = Var("q", "int *", "0x208", kind="pointer", target=0x208, address=0x308, size=8)
+    r = Var("r", "int *", "0x900", kind="pointer", target=0x900, address=0x310, size=8)
+    n = Var("n", "int *", "0x0", kind="pointer", target=0, address=0x318, size=8)
+    return Snapshot([Frame(0, "main", "main.cpp", 9, [], [x, a, p, q, r, n])])
+
+
+def test_pointer_to_variable_and_array_element():
+    s = _ptr_snapshot()
+    resolve_pointer_targets(s)
+    by = {v.name: v for v in s.frames[0].locals}
+    assert by["p"].points_to == PointsTo(0, "x", None)
+    assert by["q"].points_to == PointsTo(0, "a", 2)
+
+
+def test_unresolved_and_null_pointers_have_no_target():
+    s = _ptr_snapshot()
+    resolve_pointer_targets(s)
+    by = {v.name: v for v in s.frames[0].locals}
+    assert by["r"].points_to is None and by["n"].points_to is None
+
+
+def test_pointer_in_outer_frame_points_into_inner_frame():
+    inner = Frame(0, "f", "main.cpp", 3, [Var("x", "int", "1", address=0x100, size=4)], [])
+    outer = Frame(1, "main", "main.cpp", 9, [], [Var("p", "int *", "0x100", kind="pointer", target=0x100)])
+    s = Snapshot([inner, outer])
+    resolve_pointer_targets(s)
+    assert outer.locals[0].points_to == PointsTo(0, "x", None)
+
+
+def test_pointer_inside_struct_member_is_resolved():
+    x = Var("x", "int", "5", address=0x100, size=4)
+    member = Var("next", "int *", "0x100", kind="pointer", target=0x100)
+    node = Var("node", "Node", "{...}", kind="struct", address=0x400, size=16, children=[member])
+    s = Snapshot([Frame(0, "main", "main.cpp", 1, [], [x, node])])
+    resolve_pointer_targets(s)
+    assert member.points_to == PointsTo(0, "x", None)
+
+
+def test_element_beyond_shown_cap_points_at_whole_array():
+    kids = [Var(f"[{i}]", "int", "0") for i in range(50)]
+    big = Var("big", "int [200]", "{...}", kind="array", address=0x1000, size=800, children=kids, more=150)
+    p = Var("p", "int *", "0x1000", kind="pointer", target=0x1000 + 4 * 120)
+    s = Snapshot([Frame(0, "main", "main.cpp", 1, [], [big, p])])
+    resolve_pointer_targets(s)
+    assert p.points_to == PointsTo(0, "big", None)

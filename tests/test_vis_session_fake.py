@@ -44,15 +44,25 @@ for raw in sys.stdin:
         out(tok + '^done,stack=[frame={level="0",func="main",file="main.cpp",line="%d"},'
             'frame={level="1",func="__libc_start_main",file="crt.c",line="9"}]' % line)
     elif cmd.startswith("-stack-list-variables"):
-        out(tok + '^done,variables=[{name="sum",value="%d"},{name="a",value="{1, 2, 3}"}]' % step["n"])
+        out(tok + '^done,variables=[{name="sum",value="%d"},{name="a",value="{1, 2, 3}"},{name="p",value="0x900"},{name="q",value="0x61ff14"}]' % step["n"])
     elif "whatis a" in cmd:
         out('~"type = int [3]\\n"'); out(tok + "^done")
+    elif "whatis p" in cmd or "whatis q" in cmd:
+        out('~"type = int *\\n"'); out(tok + "^done")
     elif "whatis" in cmd:
         out('~"type = int\\n"'); out(tok + "^done")
     elif "&sum" in cmd:
         out(tok + '^done,value="(int *) 0x61ff08"')
     elif "&a" in cmd:
         out(tok + '^done,value="(int (*)[3]) 0x61ff10"')
+    elif "&p" in cmd:
+        out(tok + '^done,value="(int **) 0x61ff20"')
+    elif "&q" in cmd:
+        out(tok + '^done,value="(int **) 0x61ff28"')
+    elif "sizeof(p)" in cmd or "sizeof(q)" in cmd:
+        out(tok + '^done,value="8"')
+    elif '"*p"' in cmd:
+        out(tok + '^done,value="7"')
     elif "sizeof(sum)" in cmd:
         out(tok + '^done,value="4"')
     elif "sizeof(a)" in cmd:
@@ -142,3 +152,17 @@ def test_gdb_that_dies_at_startup_reports_its_error(qapp, tmp_path, monkeypatch)
     assert wait_until(lambda: r.failed)
     assert "libpython3.9.dll" in r.failed[0]
     assert r.fin == [] and r.session.active is False
+
+
+@needs_gpp
+def test_pointers_resolved_and_heap_pointee_read(qapp, fake_gdb):
+    from app.visualizer.model import PointsTo
+    r = Rec(Runner())
+    try:
+        s = r.start(LOOP_SRC)
+        by = {v.name: v for v in s.frames[0].locals}
+        assert by["p"].kind == "pointer" and by["p"].target == 0x900
+        assert by["p"].points_to is None and by["p"].pointee == "7"          # ชี้ heap/ที่ไม่รู้จัก → อ่านค่าที่ชี้
+        assert by["q"].points_to == PointsTo(0, "a", 1)                      # 0x61ff14 = a[1] (a เริ่มที่ 0x61ff10 ช่องละ 4 ไบต์)
+    finally:
+        r.session.stop()

@@ -223,3 +223,18 @@ def test_runaway_continue_is_killed(rec):
     rec.session.resume()
     assert wait_until(lambda: rec.fin)
     assert rec.fin[-1][1] == "timeout"
+
+
+@needs_gdb
+def test_pointer_points_to_variable_with_real_gdb(rec):
+    from app.visualizer.model import PointsTo
+    rec.start(POINTER_SRC)
+    s = rec.step("step_over", 2)
+    assert local(s, "p").points_to == PointsTo(0, "x", None)
+
+
+@needs_gdb
+def test_heap_pointee_with_real_gdb(rec):
+    rec.start("int main() {\n    int *p = new int(7);\n    return *p;\n}\n")
+    s = rec.step("step_over")
+    assert local(s, "p").pointee == "7"

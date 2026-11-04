@@ -8,10 +8,19 @@ import re
 from dataclasses import dataclass, field
 
 MAX_ELEMENTS = 50          # แสดง array สูงสุดกี่ช่อง ที่เหลือสรุปเป็น "… อีก N ช่อง"
+UNREADABLE_POINTEE = "อ่านไม่ได้"   # Var.pointee เมื่ออ่านค่าที่ pointer ชี้อยู่ไม่ได้
 STD_VALUE_LIMIT = 80       # ชนิด std:: แสดงเป็นข้อความดิบ ตัดที่ความยาวนี้
 
 _REPEATS = re.compile(r"^(.*) <repeats (\d+) times>$", re.S)
 _HEX_PREFIX = re.compile(r"^(0x[0-9a-fA-F]+)")
+
+
+@dataclass(frozen=True)
+class PointsTo:
+    """pointer ชี้ไปที่ตัวแปร var_name ในเฟรม frame_level (index = ช่องของ array ถ้าชี้เข้าไปในช่อง)"""
+    frame_level: int
+    var_name: str
+    index: int | None = None
 
 
 @dataclass
@@ -28,6 +37,7 @@ class Var:
     pointee: str | None = None
     unreadable: bool = False
     more: int = 0                        # จำนวนช่องที่ไม่ได้แสดงเพราะเกิน MAX_ELEMENTS
+    points_to: PointsTo | None = None    # pointer: ตัวแปรที่ชี้ไปหา (None = nullptr / heap / ไม่รู้)
 
 
 @dataclass
@@ -219,3 +229,32 @@ def mark_changes(prev: Snapshot | None, cur: Snapshot) -> None:
             continue
         for v in fr.args + fr.locals:
             _mark_var(before.get(v.name), v)
+
+
+# ---------- pointer ชี้ไปที่ไหน ----------
+def _walk(var: Var):
+    yield var
+    for c in var.children:
+        yield from _walk(c)
+
+
+def _locate(snap: Snapshot, target: int) -> PointsTo | None:
+    for fr in snap.frames:
+        for v in fr.args + fr.locals:
+            if v.address is None or v.size is None or not v.address <= target < v.address + max(v.size, 1):
+                continue
+            if v.kind == "array" and v.children:
+                stride = max(1, v.size // (len(v.children) + v.more))
+                idx = (target - v.address) // stride
+                return PointsTo(fr.level, v.name, idx if idx < len(v.children) else None)
+            return PointsTo(fr.level, v.name, None)
+    return None
+
+
+def resolve_pointer_targets(snap: Snapshot) -> None:
+    """ตั้ง Var.points_to ให้ pointer ทุกตัว (รวมที่อยู่ในสมาชิก struct / ช่อง array) ที่ชี้เข้าตัวแปรที่เรารู้ที่อยู่"""
+    for fr in snap.frames:
+        for top in fr.args + fr.locals:
+            for v in _walk(top):
+                if v.kind == "pointer" and v.target:
+                    v.points_to = _locate(snap, v.target)

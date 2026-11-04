@@ -339,6 +339,17 @@ class DebugSession(QObject):
 
         def finalize(_r) -> None:
             snap = model.Snapshot(frames, signal=self._signal)
+            model.resolve_pointer_targets(snap)
+            items: list[tuple[str | None, Callable | None]] = []
+            for fr in snap.frames:
+                for var in fr.args + fr.locals:
+                    if self._wants_pointee(var):
+                        items.append((f'-data-evaluate-expression --thread 1 --frame {fr.level} "*{var.name}"',
+                                      self._on_pointee(var)))
+            items.append((None, lambda _r2: emit(snap)))
+            self._enqueue_front(items)
+
+        def emit(snap: model.Snapshot) -> None:
             model.mark_changes(self._prev, snap)
             self._prev = snap
             self._busy = False
@@ -366,6 +377,21 @@ class DebugSession(QObject):
             items.append((None, lambda _r: self._frame_done(fr, raw, frames)))
             self._enqueue_front(items)
 
+        return handler
+
+    @staticmethod
+    def _wants_pointee(var: model.Var) -> bool:
+        """pointer ที่ชี้ออกนอกตัวแปรที่รู้จัก (เช่น heap) และไม่ใช่ char* → อ่านค่าที่ชี้เพื่อวาดกล่อง heap"""
+        return (var.kind == "pointer" and var.points_to is None and bool(var.target) and not var.unreadable
+                and not var.type.replace("const", "").strip().startswith("char"))
+
+    @staticmethod
+    def _on_pointee(var: model.Var) -> Callable:
+        def handler(r: Record | None) -> None:
+            if r is not None and r.cls == "done":
+                var.pointee = str(r.data.get("value", ""))
+            else:
+                var.pointee = model.UNREADABLE_POINTEE
         return handler
 
     def _type_from_console(self) -> str:
