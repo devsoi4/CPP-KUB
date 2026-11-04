@@ -77,6 +77,10 @@ class Explorer(QWidget):
         lay.addWidget(self.choose_btn)
         self._refresh_icons()
 
+    @property
+    def folder(self) -> str | None:
+        return self._folder
+
     # ---------- สร้างรายการ ----------
     def _group(self, title: str) -> QTreeWidgetItem:
         g = QTreeWidgetItem(self.tree, [title])

@@ -70,7 +70,8 @@ class MainWindow(QMainWindow):
         self.console.set_font_size(max(10, self._font_size - 1))
         self._apply_theme()
         self.resize(1280, 780)
-        self._add_doc(DEFAULT_CODE)
+        if not self._restore_session():
+            self._add_doc(DEFAULT_CODE)
         cc = find_compiler()
         self.statusBar().showMessage(
             f"พร้อมใช้งาน — คอมไพเลอร์: {cc}" if cc else "⚠ ไม่พบตัวคอมไพล์ g++ (ดูวิธีแก้ในปุ่ม รัน)")
@@ -538,6 +539,7 @@ class MainWindow(QMainWindow):
         name = QFileDialog.getExistingDirectory(self, "เลือกโฟลเดอร์งาน", start)
         if name:
             self.explorer.set_folder(name)
+            self.settings.setValue("explorer/folder", name)
 
     # ---------- พิมพ์ ----------
     def _doc_title(self) -> str:
@@ -595,7 +597,35 @@ class MainWindow(QMainWindow):
             "• By : Cerebrega.com <br>"
             "• Mail : info@cerebrega.com")
 
+    # ---------- จำแท็บที่เปิดค้างไว้ ----------
+    def _save_session(self) -> None:
+        """จำเฉพาะไฟล์ที่บันทึกแล้ว (เนื้อหา "ไม่มีชื่อ" ที่ยังไม่บันทึกจะไม่ถูกเก็บ)"""
+        docs = [d for d in self.tabs.documents() if d.path is not None]
+        cur = self.doc
+        self.settings.setValue("session/paths", [str(d.path) for d in docs])
+        self.settings.setValue("session/active", str(cur.path) if cur is not None and cur.path else "")
+        self.settings.setValue("explorer/visible", self.activity.explorer_btn.isChecked())
+        self.settings.setValue("explorer/folder", self.explorer.folder or "")
+
+    def _restore_session(self) -> bool:
+        """เปิดไฟล์ที่เคยเปิดค้างไว้ (ข้ามไฟล์ที่หายไปแล้ว) คืน True ถ้าเปิดได้อย่างน้อยหนึ่งไฟล์"""
+        if not self.settings.value("explorer/visible", True, type=bool):
+            self.activity.explorer_btn.setChecked(False)
+        folder = self.settings.value("explorer/folder", "", type=str)
+        if folder:
+            self.explorer.set_folder(folder)
+        paths = self.settings.value("session/paths", [], type=list)
+        for p in paths:
+            path = Path(p)
+            if path.is_file():
+                self.open_path(path)
+        active = self.settings.value("session/active", "", type=str)
+        if active and (doc := self.tabs.find_by_path(Path(active))) is not None:
+            self._activate_doc(doc)
+        return self.tabs.count() > 0
+
     def closeEvent(self, e) -> None:
+        self._save_session()
         for doc in list(self.tabs.documents()):
             if not self._confirm_discard(doc):
                 e.ignore()

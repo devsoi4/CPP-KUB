@@ -17,14 +17,17 @@ needs_gpp = pytest.mark.skipif(compiler.find_compiler() is None, reason="ไม�
 
 
 @pytest.fixture(scope="module")
-def qapp():
+def qapp(tmp_path_factory):
     app = QApplication.instance() or QApplication([])
-    QSettings.setPath(QSettings.NativeFormat, QSettings.UserScope, "/tmp/cpplearn_test_settings")
+    # ใช้ไฟล์ ini ชั่วคราวแทน registry ของเครื่องจริง (บน Windows setPath ของ NativeFormat ไม่มีผล)
+    QSettings.setDefaultFormat(QSettings.IniFormat)
+    QSettings.setPath(QSettings.IniFormat, QSettings.UserScope, str(tmp_path_factory.mktemp("settings")))
     return app
 
 
 @pytest.fixture
 def win(qapp):
+    QSettings("Cpp-Kub", "Cpp-Kub").clear()
     w = MainWindow()
     yield w
     for d in w.tabs.documents():
@@ -328,3 +331,61 @@ def test_run_finishing_after_close_does_not_crash(win):
     win.run_code()
     win.close_document(doc)
     assert wait_until(lambda: finished(win))
+
+
+# ---------- จำแท็บที่เปิดค้างไว้ ----------
+def _close_clean(w):
+    for d in w.tabs.documents():
+        d.editor.document().setModified(False)
+    w.close()
+
+
+def test_session_restores_saved_paths_and_active(win, tmp_path):
+    f1, f2 = tmp_path / "a.cpp", tmp_path / "b.cpp"
+    for f in (f1, f2):
+        f.write_text("// " + f.name, encoding="utf-8")
+    win.open_path(f1)
+    win.open_path(f2)
+    win.open_path(f1)                       # ทำให้ a.cpp เป็นแท็บที่เปิดอยู่
+    _close_clean(win)
+    w2 = MainWindow()
+    try:
+        assert _titles(w2) == ["a.cpp", "b.cpp"] and w2.path == f1
+    finally:
+        _close_clean(w2)
+
+
+def test_session_skips_missing_paths(win, tmp_path):
+    f = tmp_path / "gone.cpp"
+    f.write_text("x", encoding="utf-8")
+    win.open_path(f)
+    _close_clean(win)
+    f.unlink()
+    w2 = MainWindow()
+    try:
+        assert _titles(w2) == ["ไม่มีชื่อ-1"]
+    finally:
+        _close_clean(w2)
+
+
+def test_session_does_not_restore_untitled_content(win):
+    win.new_file()
+    win.editor.insertPlainText("secret_text")
+    _close_clean(win)
+    w2 = MainWindow()
+    try:
+        assert _titles(w2) == ["ไม่มีชื่อ-1"] and "secret_text" not in w2.editor.toPlainText()
+    finally:
+        _close_clean(w2)
+
+
+def test_session_restores_explorer_state(win, tmp_path):
+    win.activity.explorer_btn.setChecked(False)
+    win.explorer.set_folder(str(tmp_path))
+    _close_clean(win)
+    w2 = MainWindow()
+    try:
+        assert not w2.activity.explorer_btn.isChecked()
+        assert w2.explorer.folder == str(tmp_path)
+    finally:
+        _close_clean(w2)
