@@ -18,6 +18,7 @@ _BODIES = {
     "folder": f'<g {_STROKE}><path d="M3 6h7l2 2h9v11H3z"/></g>',
     "file": f'<g {_STROKE}><path d="M6 3h8l4 4v14H6z"/></g>',
     "close": f'<g {_STROKE}><path d="M6 6l12 12M18 6L6 18"/></g>',
+    "moon": f'<g {_STROKE}><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></g>',
     "example": f'<g {_STROKE}><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 3z"/></g>',
 }
 

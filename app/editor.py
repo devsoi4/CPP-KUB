@@ -62,11 +62,7 @@ class CppHighlighter(QSyntaxHighlighter):
         self.set_theme(dark)
 
     def set_theme(self, dark: bool) -> None:
-        c = (dict(kw="#ff7b72", ty="#79c0ff", num="#a5d6ff", st="#a5d6ff",
-                  cm="#8b949e", pp="#d2a8ff", fn="#d2a8ff")
-             if dark else
-             dict(kw="#cf222e", ty="#0550ae", num="#0a3069", st="#0a3069",
-                  cm="#6e7781", pp="#8250df", fn="#6639ba"))
+        c = theme.palette(dark)
         self._rules: list[tuple[QRegularExpression, QTextCharFormat]] = []
         kw = QRegularExpression(r"\b(" + "|".join(KEYWORDS) + r")\b")
         ty = QRegularExpression(r"\b(" + "|".join(TYPES) + r")\b")
@@ -194,7 +190,7 @@ class CodeEditor(QPlainTextEdit):
     # ---------- เลขบรรทัด ----------
     def line_number_width(self) -> int:
         digits = max(2, len(str(self.blockCount())))
-        return 18 + self.fontMetrics().horizontalAdvance("9") * digits
+        return 26 + self.fontMetrics().horizontalAdvance("9") * digits
 
     def _update_margin(self, *_):
         self.setViewportMargins(self.line_number_width(), 0, 0, 0)
@@ -213,8 +209,9 @@ class CodeEditor(QPlainTextEdit):
         self._area.setGeometry(QRect(cr.left(), cr.top(), self.line_number_width(), cr.height()))
 
     def paint_line_numbers(self, event) -> None:
+        c = theme.palette(self.dark)
         p = QPainter(self._area)
-        p.fillRect(event.rect(), QColor("#161b22" if self.dark else "#f0f2f5"))
+        p.fillRect(event.rect(), QColor(c["bg"]))
         block = self.firstVisibleBlock()
         num = block.blockNumber()
         top = round(self.blockBoundingGeometry(block).translated(self.contentOffset()).top())
@@ -224,18 +221,17 @@ class CodeEditor(QPlainTextEdit):
             if block.isVisible() and bottom >= event.rect().top():
                 kind = self._error_lines.get(num + 1)
                 if num + 1 == self._debug_line:
-                    p.setPen(QColor(theme.palette(self.dark)["accent"]))
+                    p.setPen(QColor(c["accent"]))
                     p.drawText(2, top, 14, self.fontMetrics().height(), Qt.AlignCenter, "▶")
                 elif kind == "error":
-                    p.setPen(QColor("#f85149"))
+                    p.setPen(QColor(c["danger"]))
                     p.drawText(2, top, 14, self.fontMetrics().height(), Qt.AlignCenter, "●")
                 elif kind == "warning":
-                    p.setPen(QColor("#d29922"))
+                    p.setPen(QColor(c["warn"]))
                     p.drawText(2, top, 14, self.fontMetrics().height(), Qt.AlignCenter, "●")
                 active = num == cur
-                p.setPen(QColor(("#e6edf3" if self.dark else "#1f2328") if active
-                                else ("#6e7681" if self.dark else "#8c959f")))
-                p.drawText(0, top, self._area.width() - 6, self.fontMetrics().height(),
+                p.setPen(QColor(c["text"] if active else c["gutter_text"]))
+                p.drawText(0, top, self._area.width() - 12, self.fontMetrics().height(),
                            Qt.AlignRight, str(num + 1))
             block = block.next()
             top = bottom
@@ -246,7 +242,7 @@ class CodeEditor(QPlainTextEdit):
     def _refresh_extra(self) -> None:
         extras: list[QTextEdit.ExtraSelection] = []
         sel = QTextEdit.ExtraSelection()
-        sel.format.setBackground(QColor("#1f2933" if self.dark else "#eef6ff"))
+        sel.format.setBackground(QColor(theme.palette(self.dark)["line_hl"]))
         sel.format.setProperty(QTextFormat.FullWidthSelection, True)
         sel.cursor = self.textCursor()
         sel.cursor.clearSelection()

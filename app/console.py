@@ -8,12 +8,14 @@ from PySide6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
+from . import theme
 from .editor import code_font
 
-COLORS_LIGHT = dict(out="#1f2328", err="#cf222e", info="#0969da", echo="#8250df",
-                    ok="#1a7f37", warn="#9a6700")
-COLORS_DARK = dict(out="#e6edf3", err="#ff7b72", info="#79c0ff", echo="#d2a8ff",
-                   ok="#56d364", warn="#e3b341")
+
+def _colors(dark: bool) -> dict[str, str]:
+    p = theme.palette(dark)
+    return dict(out=p["text"], err=p["danger"], info=p["accent"], echo=p["echo"],
+                ok=p["ok"], warn=p["warn"])
 
 
 class ConsoleWidget(QWidget):
@@ -35,6 +37,7 @@ class ConsoleWidget(QWidget):
         self.input.setPlaceholderText("พิมพ์ข้อมูลที่โปรแกรมรออยู่ (cin) แล้วกด Enter — พิมพ์ภาษาไทยได้")
         self.input.returnPressed.connect(self._submit)
         self.send_btn = QPushButton("ส่ง")
+        self.send_btn.setObjectName("SendButton")
         self.send_btn.clicked.connect(self._submit)
         self.eof_btn = QPushButton("จบข้อมูล (EOF)")
         self.eof_btn.setToolTip("ใช้กับ while (cin >> x) เพื่อบอกว่าไม่มีข้อมูลเพิ่มแล้ว")
@@ -42,14 +45,16 @@ class ConsoleWidget(QWidget):
 
         row = QHBoxLayout()
         row.setContentsMargins(0, 0, 0, 0)
-        row.addWidget(QLabel("ป้อนข้อมูล:"))
+        row.setSpacing(6)
+        row.addWidget(QLabel("ป้อนข้อมูล"))
         row.addWidget(self.input, 1)
         row.addWidget(self.send_btn)
         row.addWidget(self.eof_btn)
 
         run_tab = QWidget()
         lay = QVBoxLayout(run_tab)
-        lay.setContentsMargins(4, 4, 4, 4)
+        lay.setContentsMargins(8, 8, 8, 8)
+        lay.setSpacing(8)
         lay.addWidget(self.output, 1)
         lay.addLayout(row)
 
@@ -63,7 +68,8 @@ class ConsoleWidget(QWidget):
         self.preset_auto_eof.setToolTip("เปิดเมื่อโค้ดอ่านข้อมูลด้วย while (cin >> x)")
         preset_tab = QWidget()
         pl = QVBoxLayout(preset_tab)
-        pl.setContentsMargins(4, 4, 4, 4)
+        pl.setContentsMargins(8, 8, 8, 8)
+        pl.setSpacing(8)
         pl.addWidget(self.preset, 1)
         pl.addWidget(self.preset_auto_eof)
 
@@ -73,6 +79,8 @@ class ConsoleWidget(QWidget):
         self.problems.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
 
         self.tabs = QTabWidget()
+        self.tabs.setObjectName("PanelTabs")
+        self.tabs.setDocumentMode(True)
         self.tabs.addTab(run_tab, "ผลลัพธ์")
         self.tabs.addTab(self.problems, "ปัญหา")
         self.tabs.addTab(preset_tab, "ข้อมูลนำเข้าล่วงหน้า")
@@ -118,7 +126,7 @@ class ConsoleWidget(QWidget):
         self.output.clear()
 
     def _append(self, text: str, color_key: str, *, bold: bool = False) -> None:
-        colors = COLORS_DARK if self.dark else COLORS_LIGHT
+        colors = _colors(self.dark)
         fmt = QTextCharFormat()
         fmt.setForeground(QColor(colors[color_key]))
         if bold:

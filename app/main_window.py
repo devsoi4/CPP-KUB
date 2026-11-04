@@ -1,13 +1,14 @@
 """หน้าต่างหลักของ CppLearn: แท็บเอกสารหลายไฟล์ + Explorer + แผงผลลัพธ์/ปัญหา"""
 from __future__ import annotations
 
+import html
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import QSettings, QSize, Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
-    QApplication, QFileDialog, QHBoxLayout, QLabel, QListWidgetItem, QMainWindow, QMessageBox,
-    QSplitter, QToolBar, QWidget,
+    QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QListWidgetItem, QMainWindow, QMessageBox,
+    QSizePolicy, QSplitter, QToolBar, QVBoxLayout, QWidget,
 )
 
 from . import icons, printing, textio, theme
@@ -24,6 +25,18 @@ from .visualizer.session import DebugSession
 
 APP_NAME = "Cpp-Kub"
 FILTER = "ไฟล์ C++ (*.cpp *.cc *.cxx *.h *.hpp);;ทุกไฟล์ (*)"
+
+
+def _card(w: QWidget) -> QFrame:
+    """ห่อ widget ด้วยการ์ดมุมมน — เว้นขอบใน 4px เพื่อไม่ให้มุมเหลี่ยมของ widget ลูกโผล่พ้นมุมโค้ง"""
+    card = QFrame()
+    card.setObjectName("Card")
+    lay = QVBoxLayout(card)
+    lay.setContentsMargins(4, 4, 4, 4)
+    lay.addWidget(w)
+    return card
+
+
 NEW_TEMPLATE = "#include <iostream>\nusing namespace std;\n\nint main() {\n    \n    return 0;\n}\n"
 
 
@@ -51,25 +64,40 @@ class MainWindow(QMainWindow):
         self.explorer = Explorer()
         self.activity = ActivityBar()
 
+        self.tabs.setObjectName("DocTabs")
+        self.explorer_card = _card(self.explorer)
+        # Visualizer ไม่ห่อการ์ด (เทสต์/โค้ดซ่อน-แสดงตัวมันเองโดยตรง) จึงให้ตัวมันวาดพื้นการ์ดเอง
+        self.visualizer.setAttribute(Qt.WA_StyledBackground, True)
+        self.visualizer.layout().setContentsMargins(4, 4, 4, 4)
         right = QSplitter(Qt.Vertical)
-        right.addWidget(self.tabs)
-        right.addWidget(self.console)
+        right.setObjectName("ShellSplit")
+        right.setHandleWidth(8)
+        right.addWidget(_card(self.tabs))
+        right.addWidget(_card(self.console))
         right.setSizes([480, 300])
         right.setCollapsible(0, False)
         self.main_split = QSplitter(Qt.Horizontal)
-        self.main_split.addWidget(self.explorer)
+        self.main_split.setObjectName("ShellSplit")
+        self.main_split.setHandleWidth(8)
+        self.main_split.addWidget(self.explorer_card)
         self.main_split.addWidget(right)
         self.main_split.addWidget(self.visualizer)
         self.main_split.setSizes([240, 720, 340])
         self.main_split.setCollapsible(1, False)
         central = QWidget()
+        central.setObjectName("Shell")
         lay = QHBoxLayout(central)
-        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setContentsMargins(0, 0, 8, 2)
         lay.setSpacing(0)
         lay.addWidget(self.activity)
         lay.addWidget(self.main_split, 1)
         self.setCentralWidget(central)
 
+        self._status_msg, self._status_kind = "", "idle"
+        self.status_label = QLabel("")
+        self.status_label.setTextFormat(Qt.RichText)
+        self.statusBar().addWidget(self.status_label, 1)
+        self.statusBar().setSizeGripEnabled(False)
         self.pos_label = QLabel("")
         self.enc_label = QLabel("")
         self.statusBar().addPermanentWidget(self.pos_label)
@@ -86,8 +114,10 @@ class MainWindow(QMainWindow):
         if not self._restore_session():
             self._add_doc(DEFAULT_CODE)
         cc = find_compiler()
-        self.statusBar().showMessage(
-            f"พร้อมใช้งาน — คอมไพเลอร์: {cc}" if cc else "⚠ ไม่พบตัวคอมไพล์ g++ (ดูวิธีแก้ในปุ่ม รัน)")
+        if cc:
+            self._status(f"พร้อมใช้งาน — คอมไพเลอร์: {cc}", "ok")
+        else:
+            self._status("ไม่พบตัวคอมไพล์ g++ (ดูวิธีแก้ในปุ่ม รัน)", "error")
 
     # ---------- เอกสารปัจจุบัน (ให้โค้ด/เทสต์เดิมใช้ win.editor, win.path ได้) ----------
     @property
@@ -121,10 +151,10 @@ class MainWindow(QMainWindow):
     def _build_actions(self) -> None:
         self.a_new = self._act("ไฟล์ใหม่", self.new_file, "Ctrl+N")
         self.a_open = self._act("เปิดไฟล์...", self.open_file, "Ctrl+O")
-        self.a_save = self._act("บันทึก", self.save_file, "Ctrl+S")
+        self.a_save = self._act("บันทึก", self.save_file, "Ctrl+S", "บันทึก (Ctrl+S)")
         self.a_save_as = self._act("บันทึกเป็น...", self.save_file_as, "Ctrl+Shift+S")
         self.a_close_tab = self._act("ปิดแท็บ", lambda: self.doc and self.close_document(self.doc), "Ctrl+W")
-        self.a_print = self._act("พิมพ์โค้ด...", self.print_code, "Ctrl+P")
+        self.a_print = self._act("พิมพ์โค้ด...", self.print_code, "Ctrl+P", "พิมพ์โค้ด (Ctrl+P)")
         self.a_print_out = self._act("พิมพ์ผลลัพธ์...", self.print_output)
         self.a_pdf = self._act("ส่งออกโค้ดเป็น PDF...", self.export_code_pdf)
         self.a_quit = self._act("ออกจากโปรแกรม", self.close, "Ctrl+Q")
@@ -149,7 +179,7 @@ class MainWindow(QMainWindow):
         self.a_toggle_explorer = self._act("แสดง/ซ่อน Explorer", self.activity.explorer_btn.toggle, "Ctrl+B")
         self.a_zoom_in = self._act("ขยายตัวอักษร", lambda: self._zoom(+1), "Ctrl+=")
         self.a_zoom_out = self._act("ลดตัวอักษร", lambda: self._zoom(-1), "Ctrl+-")
-        self.a_dark = self._act("ธีมมืด", self._toggle_dark)
+        self.a_dark = self._act("ธีมมืด", self._toggle_dark, tip="สลับธีมสว่าง/มืด")
         self.a_dark.setCheckable(True)
         self.a_dark.setChecked(self.dark)
         self.a_clear = self._act("ล้างหน้าต่างผลลัพธ์", self.console.clear)
@@ -205,11 +235,22 @@ class MainWindow(QMainWindow):
         self.toolbar.addSeparator()
         self.toolbar.addAction(self.a_save)
         self.toolbar.addAction(self.a_print)
+        spacer = QWidget()
+        spacer.setStyleSheet("background:transparent;")
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.toolbar.addWidget(spacer)
+        self.toolbar.addAction(self.a_dark)
+        self.toolbar.widgetForAction(self.a_run).setObjectName("RunButton")
+        self.toolbar.widgetForAction(self.a_stop).setObjectName("StopButton")
+        self.toolbar.setIconSize(QSize(16, 16))
+        for a in (self.a_save, self.a_print, self.a_dark):
+            self.toolbar.widgetForAction(a).setToolButtonStyle(Qt.ToolButtonIconOnly)
 
     def _refresh_icons(self) -> None:
         p = theme.palette(self.dark)
-        for action, name, color in ((self.a_run, "run", p["ok"]), (self.a_stop, "stop", p["danger"]),
-                                    (self.a_save, "save", p["text"]), (self.a_print, "print", p["text"])):
+        for action, name, color in ((self.a_run, "run", p["run_text"]), (self.a_stop, "stop", p["danger"]),
+                                    (self.a_save, "save", p["text"]), (self.a_print, "print", p["text"]),
+                                    (self.a_dark, "moon", p["text"])):
             action.setIcon(icons.icon(name, color))
 
     def _connect_signals(self) -> None:
@@ -237,7 +278,7 @@ class MainWindow(QMainWindow):
         self.tabs.modified_changed.connect(lambda _d: self._update_title())
         self.tabs.tabBar().tabMoved.connect(lambda *_: self._sync_explorer())
 
-        self.activity.explorer_toggled.connect(self.explorer.setVisible)
+        self.activity.explorer_toggled.connect(self.explorer_card.setVisible)
         self.explorer.document_requested.connect(self._activate_doc)
         self.explorer.example_requested.connect(self._open_example_by_title)
         self.explorer.open_path_requested.connect(lambda p: self.open_path(Path(p)))
@@ -358,7 +399,7 @@ class MainWindow(QMainWindow):
     def _on_compile_started(self) -> None:
         self._set_busy(True)
         self.tabs.set_running(self._run_doc)
-        self.statusBar().showMessage("กำลังคอมไพล์...")
+        self._status("กำลังคอมไพล์...", "busy")
         self.console.append_info("⏳ กำลังคอมไพล์...")
 
     def _on_problem(self, msg: str) -> None:
@@ -367,7 +408,7 @@ class MainWindow(QMainWindow):
             self._end_debug()
         self._set_busy(False)
         self.console.set_input_enabled(False)
-        self.statusBar().showMessage("เกิดปัญหา")
+        self._status("เกิดปัญหา", "error")
         self.console.append_info(msg, "err")
         QMessageBox.warning(self, APP_NAME, msg)
 
@@ -403,7 +444,7 @@ class MainWindow(QMainWindow):
             self.console.append_info("🐞 เริ่มดีบัก" if self._debugging else "▶ เริ่มรันโปรแกรม", "info")
         else:
             self._set_busy(False)
-            self.statusBar().showMessage(f"คอมไพล์ไม่ผ่าน ({n_err} ข้อผิดพลาด)")
+            self._status(f"คอมไพล์ไม่ผ่าน ({n_err} ข้อผิดพลาด)", "error")
             self.console.append_info(f"✖ คอมไพล์ไม่ผ่าน — พบข้อผิดพลาด {n_err} รายการ", "err")
             report = format_report(diags) or raw
             self.console.append_block(report, "err")
@@ -456,7 +497,7 @@ class MainWindow(QMainWindow):
             top = snap.frames[0]
             values = {v.name: v.value for v in top.args + top.locals}
             self.visualizer.set_loops(self._loop_tracker.update(len(snap.frames), snap.line), values)
-            self.statusBar().showMessage(f"หยุดที่บรรทัด {snap.line} ใน {snap.func}()")
+            self._status(f"หยุดที่บรรทัด {snap.line} ใน {snap.func}()", "busy")
         if snap.signal:
             self._debug_signal = snap.signal
             why = describe_signal(snap.signal)
@@ -496,7 +537,7 @@ class MainWindow(QMainWindow):
 
     def _on_debug_failed(self, msg: str) -> None:
         self.console.append_info(msg, "err")
-        self.statusBar().showMessage("เริ่มดีบักไม่ได้")
+        self._status("เริ่มดีบักไม่ได้", "error")
         self._end_debug()
 
     def _end_debug(self) -> None:
@@ -511,10 +552,10 @@ class MainWindow(QMainWindow):
         self._loop_tracker.reset()
         self._set_busy(False)
         self._update_debug_actions()
-        self.statusBar().showMessage("จบการดีบัก")
+        self._status("จบการดีบัก", "idle")
 
     def _on_run_started(self) -> None:
-        self.statusBar().showMessage("กำลังรันโปรแกรม...")
+        self._status("กำลังรันโปรแกรม...", "busy")
         self.console.set_input_enabled(True)
         preset, auto_eof = self._run_preset
         if preset.strip():
@@ -536,23 +577,23 @@ class MainWindow(QMainWindow):
             self.console.append_info(
                 f"⏱ หยุดโปรแกรม: ไม่มีความเคลื่อนไหวเกิน {secs} วินาที "
                 "(อาจวนลูปไม่รู้จบ หรือรอข้อมูลที่ไม่ได้ส่งเข้ามา)", "warn")
-            self.statusBar().showMessage("หยุดเพราะหมดเวลา")
+            self._status("หยุดเพราะหมดเวลา", "warn")
         elif reason == "output_limit":
             self.console.append_info("⛔ หยุดโปรแกรม: พิมพ์ข้อความมากเกินไป "
                                      "(อาจมีลูปที่พิมพ์ไม่รู้จบ)", "warn")
-            self.statusBar().showMessage("หยุดเพราะพิมพ์มากเกินไป")
+            self._status("หยุดเพราะพิมพ์มากเกินไป", "warn")
         elif reason == "stopped":
             self.console.append_info("■ ผู้ใช้สั่งหยุดโปรแกรม", "warn")
-            self.statusBar().showMessage("หยุดแล้ว")
+            self._status("หยุดแล้ว", "idle")
         elif reason == "crash" or crashed_text:
             self.console.append_info("💥 โปรแกรมหยุดทำงานผิดปกติ", "err")
             if crashed_text:
                 self.console.append_block("   → " + crashed_text, "err")
-            self.statusBar().showMessage("โปรแกรมหยุดผิดปกติ")
+            self._status("โปรแกรมหยุดผิดปกติ", "error")
         else:
             kind = "ok" if code == 0 else "warn"
             self.console.append_info(f"● โปรแกรมทำงานจบ (exit code {code})", kind)
-            self.statusBar().showMessage("ทำงานเสร็จสิ้น")
+            self._status("ทำงานเสร็จสิ้น", "ok")
 
     def _goto_problem(self, item: QListWidgetItem) -> None:
         line = item.data(Qt.UserRole)
@@ -616,7 +657,7 @@ class MainWindow(QMainWindow):
 
     def load_example(self, title: str, code: str) -> None:
         self._open_text(code, None)
-        self.statusBar().showMessage(f"โหลดตัวอย่าง: {title}")
+        self._status(f"โหลดตัวอย่าง: {title}", "idle")
 
     def _open_example_by_title(self, title: str) -> None:
         code = dict(EXAMPLES).get(title)
@@ -643,7 +684,7 @@ class MainWindow(QMainWindow):
         self.settings.setValue("last_dir", str(path.parent))
         self._open_text(text, path, enc)
         if enc not in ("utf-8", "utf-8-sig"):
-            self.statusBar().showMessage(f"อ่านไฟล์ด้วย {enc} — เมื่อบันทึกจะแปลงเป็น UTF-8 ให้อัตโนมัติ")
+            self._status(f"อ่านไฟล์ด้วย {enc} — เมื่อบันทึกจะแปลงเป็น UTF-8 ให้อัตโนมัติ", "warn")
 
     def save_file(self) -> bool:
         return self._save_doc(self.doc)
@@ -684,7 +725,7 @@ class MainWindow(QMainWindow):
         self._update_title()
         self._update_status_doc()
         self._sync_explorer()
-        self.statusBar().showMessage(f"บันทึกแล้ว: {path}")
+        self._status(f"บันทึกแล้ว: {path}", "ok")
         return True
 
     def choose_folder(self) -> None:
@@ -700,7 +741,7 @@ class MainWindow(QMainWindow):
 
     def print_code(self) -> None:
         if printing.print_text(self, self._doc_title(), self.editor.toPlainText()):
-            self.statusBar().showMessage("ส่งงานพิมพ์แล้ว")
+            self._status("ส่งงานพิมพ์แล้ว", "ok")
 
     def print_output(self) -> None:
         text = self.console.output.toPlainText()
@@ -715,7 +756,7 @@ class MainWindow(QMainWindow):
         name, _ = QFileDialog.getSaveFileName(self, "ส่งออกเป็น PDF", start, "PDF (*.pdf)")
         if name:
             printing.export_pdf(name, self._doc_title(), self.editor.toPlainText())
-            self.statusBar().showMessage(f"ส่งออกแล้ว: {name}")
+            self._status(f"ส่งออกแล้ว: {name}", "ok")
 
     # ---------- มุมมอง ----------
     def _zoom(self, delta: int) -> None:
@@ -739,6 +780,21 @@ class MainWindow(QMainWindow):
         self.activity.set_dark(self.dark)
         self.visualizer.set_dark(self.dark)
         self._refresh_icons()
+        self._status(self._status_msg, self._status_kind)
+        # ตั้ง objectName หลังสร้างปุ่มแล้ว ต้อง polish ใหม่เพื่อให้ stylesheet มีผล
+        for a in (self.a_run, self.a_stop):
+            w = self.toolbar.widgetForAction(a)
+            w.style().unpolish(w)
+            w.style().polish(w)
+
+    _STATUS_COLORS = dict(idle="muted", busy="accent", ok="ok", warn="warn", error="danger")
+
+    def _status(self, msg: str, kind: str = "idle") -> None:
+        """ข้อความในแถบสถานะ พร้อมจุดสีบอกสถานะ: idle/busy/ok/warn/error"""
+        self._status_msg, self._status_kind = msg, kind
+        color = theme.palette(self.dark)[self._STATUS_COLORS.get(kind, "muted")]
+        self.statusBar().clearMessage()
+        self.status_label.setText(f'<span style="color:{color}">●</span>&nbsp;&nbsp;{html.escape(msg)}')
 
     def _about(self) -> None:
         QMessageBox.about(

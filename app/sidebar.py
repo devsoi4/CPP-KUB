@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QBrush, QColor, QFont
 from PySide6.QtWidgets import (
     QPushButton, QToolButton, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
@@ -25,20 +25,31 @@ class ActivityBar(QWidget):
         super().__init__(parent)
         self.setObjectName("ActivityBar")
         self.setAttribute(Qt.WA_StyledBackground, True)
-        self.setFixedWidth(44)
+        self.setFixedWidth(48)
         self.explorer_btn = QToolButton()
         self.explorer_btn.setCheckable(True)
         self.explorer_btn.setChecked(True)
         self.explorer_btn.setToolTip("แสดง/ซ่อน Explorer (Ctrl+B)")
         self.explorer_btn.toggled.connect(self.explorer_toggled.emit)
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(4, 6, 4, 6)
+        lay.setContentsMargins(6, 2, 4, 6)
         lay.addWidget(self.explorer_btn)
         lay.addStretch(1)
-        self.set_dark(False)
+        self.explorer_btn.setFixedSize(38, 38)
+        self.explorer_btn.setIconSize(QSize(22, 22))
+        self._dark = False
+        self.explorer_btn.toggled.connect(self._refresh_icon)
+        self._refresh_icon()
 
     def set_dark(self, dark: bool) -> None:
-        self.explorer_btn.setIcon(icons.icon("explorer", theme.palette(dark)["muted"], 24))
+        self._dark = dark
+        self._refresh_icon()
+
+    def _refresh_icon(self, *_) -> None:
+        p = theme.palette(self._dark)
+        # ปุ่มที่เปิดอยู่ใช้สี accent ให้รู้ว่าแผงไหนกำลังแสดง
+        color = p["accent"] if self.explorer_btn.isChecked() else p["muted"]
+        self.explorer_btn.setIcon(icons.icon("explorer", color, 22))
 
 
 class Explorer(QWidget):
@@ -63,6 +74,7 @@ class Explorer(QWidget):
         self.tree.setEditTriggers(QTreeWidget.NoEditTriggers)
         self.tree.itemClicked.connect(self._clicked)
         self.choose_btn = QPushButton("เลือกโฟลเดอร์งาน...")
+        self.choose_btn.setObjectName("GhostButton")
         self.choose_btn.clicked.connect(self.choose_folder_requested.emit)
 
         self._g_docs = self._group("ไฟล์ที่เปิดอยู่")
@@ -72,7 +84,8 @@ class Explorer(QWidget):
             self._add(self._g_examples, title, "example", title)
 
         lay = QVBoxLayout(self)
-        lay.setContentsMargins(0, 0, 0, 6)
+        lay.setContentsMargins(4, 6, 4, 4)
+        lay.setSpacing(6)
         lay.addWidget(self.tree, 1)
         lay.addWidget(self.choose_btn)
         self._refresh_icons()
@@ -87,6 +100,8 @@ class Explorer(QWidget):
         g.setFlags(Qt.ItemIsEnabled)
         f = g.font(0)
         f.setBold(True)
+        f.setPointSizeF(f.pointSizeF() * 0.9)
+        f.setLetterSpacing(QFont.PercentageSpacing, 104)
         g.setFont(0, f)
         g.setExpanded(True)
         return g
@@ -102,6 +117,7 @@ class Explorer(QWidget):
     def _refresh_icons(self) -> None:
         c = theme.palette(self._dark)["muted"]
         for group, name in ((self._g_docs, "file"), (self._g_examples, "example"), (self._g_folder, "file")):
+            group.setForeground(0, QBrush(QColor(c)))     # หัวข้อกลุ่มสีจาง ให้รายการเด่นกว่า
             ic = icons.icon(name, c, 16)
             for i in range(group.childCount()):
                 group.child(i).setIcon(0, ic)
