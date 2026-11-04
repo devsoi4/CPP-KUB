@@ -138,3 +138,35 @@ def test_clicking_stack_frame_moves_marker(dwin, fake_gdb):
     assert wait_until(lambda: dwin.editor.debug_line == 3)
     dwin.visualizer.frame_selected.emit(4)
     assert dwin.editor.debug_line == 4
+
+
+def test_preset_input_is_passed_to_session(dwin, monkeypatch):
+    calls = []
+    monkeypatch.setattr(dwin.debug_session, "start", lambda src, preset="": calls.append((src, preset)))
+    set_code(dwin, LOOP_SRC)
+    dwin.console.set_preset("21\n", False)
+    dwin.start_debug()
+    assert calls == [(LOOP_SRC, "21\n")]
+    dwin._end_debug()
+
+
+@needs_gpp
+def test_switching_tabs_keeps_session_and_marker(dwin, fake_gdb):
+    set_code(dwin, LOOP_SRC)
+    first = dwin.doc
+    dwin.start_debug()
+    assert wait_until(lambda: first.editor.debug_line == 3)
+    dwin.new_file()                                       # สลับไปแท็บใหม่ระหว่างดีบัก
+    assert dwin.doc is not first
+    assert dwin.debug_session.active and dwin._debug_doc is first
+    assert first.editor.isReadOnly() and not dwin.doc.editor.isReadOnly()
+    dwin.a_step_over.trigger()                            # ก้าวต่อได้แม้ดูแท็บอื่นอยู่ → ลูกศรไปขยับที่แท็บที่ดีบักอยู่
+    assert wait_until(lambda: first.editor.debug_line == 4)
+    assert dwin.doc.editor.debug_line is None
+
+
+def test_docs_mention_visualizer_and_gdb():
+    root = Path(__file__).resolve().parent.parent
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    assert "Visualizer" in readme and "gdb.exe" in readme and "F10" in readme and "app/visualizer/" in readme
+    assert "gdb.exe" in (root / "build_windows.bat").read_text(encoding="utf-8", errors="replace")

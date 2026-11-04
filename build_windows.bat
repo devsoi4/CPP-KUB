@@ -21,6 +21,12 @@ if not exist compiler\bin\g++.exe (
   pause
 )
 
+if not exist compiler\bin\gdb.exe (
+  echo [WARNING] compiler\bin\gdb.exe not found. The Visualizer (step debugger) will not work.
+  echo           Copy gdb.exe and the DLLs it needs from a full MinGW-w64 / WinLibs package. See README.md.
+  pause
+)
+
 %PY% -m pip install -r requirements.txt
 if errorlevel 1 goto fail
 
