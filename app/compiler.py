@@ -47,6 +47,12 @@ NO_COMPILER_MSG = (
     "• หรือติดตั้ง MinGW-w64 / MSYS2 แล้วเพิ่ม g++ ใน PATH"
 )
 
+NO_GDB_MSG = (
+    "ไม่พบตัวดีบั๊ก (gdb) จึงใช้ตัวช่วยมองเห็นการทำงานไม่ได้\n"
+    "• ถ้าเป็นเวอร์ชันแจกจ่าย ให้ใส่ gdb.exe ไว้ในโฟลเดอร์ 'compiler\\bin' (MinGW-w64 แบบเต็มมี gdb ให้)\n"
+    "• หรือติดตั้ง MinGW-w64 / MSYS2 ที่มี gdb แล้วเพิ่มใน PATH"
+)
+
 
 def app_dir() -> Path:
     """โฟลเดอร์ของโปรแกรม (รองรับทั้งรันด้วย python และแพ็กด้วย PyInstaller)"""
@@ -66,6 +72,15 @@ def find_compiler() -> str | None:
         if found:
             return found
     return None
+
+
+def find_gdb() -> str | None:
+    """หา gdb โดยดูตัวที่แพ็กมากับโปรแกรมก่อน แล้วค่อยหาใน PATH"""
+    exe = "gdb.exe" if IS_WINDOWS else "gdb"
+    bundled = app_dir() / "compiler" / "bin" / exe
+    if bundled.is_file():
+        return str(bundled)
+    return shutil.which("gdb")
 
 
 def _is_ascii(path: Path) -> bool:
@@ -102,7 +117,7 @@ def work_dir() -> Path:
 
 def build_args(src: Path, exe: Path, prelude: Path, std: str = "c++17") -> list[str]:
     args = [
-        f"-std={std}", "-Wall", "-Wextra", "-g",
+        f"-std={std}", "-Wall", "-Wextra", "-g", "-O0",
         "-finput-charset=UTF-8", "-fexec-charset=UTF-8",
         "-fdiagnostics-color=never",
         "-include", str(prelude),
@@ -164,8 +179,14 @@ class Runner(QObject):
         self.idle_timeout_ms = RUN_IDLE_TIMEOUT_MS
         self._cc_cancelled = False
         self._run_after = True
+        self._exe: Path | None = None
 
     # ---------- สถานะ ----------
+    @property
+    def exe_path(self) -> Path | None:
+        """พาธของไฟล์ที่คอมไพล์ล่าสุด (None ถ้ายังไม่เคยคอมไพล์)"""
+        return self._exe
+
     @property
     def is_compiling(self) -> bool:
         return self._cc is not None and self._cc.state() != QProcess.NotRunning

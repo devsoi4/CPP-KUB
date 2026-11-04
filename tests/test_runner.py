@@ -119,3 +119,25 @@ def test_describe_exit_windows_codes():
     assert "access violation" in describe_exit(0xC0000005, True)
     assert describe_exit(0, False) is None
     assert describe_exit(3, False) is None
+
+
+def test_find_gdb_prefers_bundled(tmp_path, monkeypatch):
+    exe = "gdb.exe" if compiler.IS_WINDOWS else "gdb"
+    (tmp_path / "compiler" / "bin").mkdir(parents=True)
+    (tmp_path / "compiler" / "bin" / exe).write_text("x")
+    monkeypatch.setattr(compiler, "app_dir", lambda: tmp_path)
+    assert compiler.find_gdb() == str(tmp_path / "compiler" / "bin" / exe)
+
+
+def test_find_gdb_none(tmp_path, monkeypatch):
+    monkeypatch.setattr(compiler, "app_dir", lambda: tmp_path)
+    monkeypatch.setattr(compiler.shutil, "which", lambda name: None)
+    assert compiler.find_gdb() is None
+
+
+def test_build_args_has_O0(tmp_path):
+    assert "-O0" in compiler.build_args(tmp_path / "a.cpp", tmp_path / "a.exe", tmp_path / "p.h")
+
+
+def test_runner_exe_path_none_before_compile(qapp):
+    assert Runner().exe_path is None
