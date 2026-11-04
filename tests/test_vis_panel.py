@@ -98,3 +98,77 @@ def test_set_dark_rerenders_without_error(panel):
     panel.show_snapshot(make_snapshot())
     panel.set_dark(True)
     assert panel.variables.topLevelItemCount() == 6
+
+
+# ---------- call stack + ป้ายรอบ loop (งานที่ 9) ----------
+from app.visualizer.loops import LoopStatus  # noqa: E402
+
+
+def make_recursion_snapshot():
+    fact2 = Frame(0, "fact", "main.cpp", 4, args=[Var("n", "int", "2")], locals=[])
+    fact3 = Frame(1, "fact", "main.cpp", 4, args=[Var("n", "int", "3")], locals=[])
+    main = Frame(2, "main", "main.cpp", 7, args=[], locals=[Var("result", "int", "0")])
+    return Snapshot([fact2, fact3, main])
+
+
+def test_stack_rows_innermost_first(panel):
+    panel.show_snapshot(make_recursion_snapshot())
+    assert panel.stack.count() == 3
+    assert "fact" in panel.stack.item(0).text() and "n=2" in panel.stack.item(0).text()
+    assert "n=3" in panel.stack.item(1).text()
+    assert "main" in panel.stack.item(2).text() and "บรรทัด 7" in panel.stack.item(2).text()
+    assert panel.stack.currentRow() == 0
+
+
+def test_selecting_frame_switches_variables_and_emits_line(panel):
+    seen = []
+    panel.frame_selected.connect(seen.append)
+    panel.show_snapshot(make_recursion_snapshot())
+    assert seen == []                                   # การแสดง snapshot เองไม่ใช่การคลิกของผู้ใช้
+    panel.stack.setCurrentRow(2)
+    assert seen == [7]
+    assert [i.text(0) for i in top(panel)] == ["result"]
+    panel.stack.setCurrentRow(1)
+    assert [i.text(0) for i in top(panel)] == ["n"] and top(panel)[0].text(2) == "3"
+
+
+def test_new_snapshot_resets_to_innermost_frame(panel):
+    panel.show_snapshot(make_recursion_snapshot())
+    panel.stack.setCurrentRow(2)
+    panel.show_snapshot(make_recursion_snapshot())
+    assert panel.stack.currentRow() == 0 and top(panel)[0].text(2) == "2"
+
+
+def test_clear_empties_stack(panel):
+    panel.show_snapshot(make_recursion_snapshot())
+    panel.clear()
+    assert panel.stack.count() == 0 and panel.loop_label.isHidden()
+
+
+def test_loop_badge_for_with_variable(panel):
+    panel.set_loops([LoopStatus(5, "for", "i", 2)], {"i": "1"})
+    assert not panel.loop_label.isHidden()
+    assert "รอบที่ 2" in panel.loop_label.text() and "i = 1" in panel.loop_label.text()
+
+
+def test_loop_badge_while_and_nested(panel):
+    panel.set_loops([LoopStatus(3, "for", "i", 1), LoopStatus(4, "while", None, 3)], {"i": "0"})
+    text = panel.loop_label.text()
+    assert "รอบที่ 1" in text and "รอบที่ 3" in text and "›" in text
+
+
+def test_loop_badge_hidden_when_no_loop(panel):
+    panel.set_loops([LoopStatus(5, "for", "i", 2)], {"i": "1"})
+    panel.set_loops([], {})
+    assert panel.loop_label.isHidden()
+
+
+def test_loop_badge_unknown_variable_value(panel):
+    panel.set_loops([LoopStatus(5, "for", "i", 1)], {})
+    assert "i = ?" in panel.loop_label.text()
+
+
+def test_exited_snapshot_clears_stack(panel):
+    panel.show_snapshot(make_recursion_snapshot())
+    panel.show_snapshot(Snapshot([], exited=True, exit_code=0))
+    assert panel.stack.count() == 0

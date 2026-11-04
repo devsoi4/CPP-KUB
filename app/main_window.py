@@ -17,6 +17,7 @@ from .document import Document
 from .examples import DEFAULT_CODE, EXAMPLES
 from .sidebar import ActivityBar, Explorer
 from .tabs import DocumentTabs
+from .visualizer.loops import LoopTracker, find_loops
 from .visualizer.panel import VisualizerPanel
 from .visualizer.session import DebugSession
 
@@ -45,6 +46,7 @@ class MainWindow(QMainWindow):
         self._debugging = False
         self._debug_doc: Document | None = None
         self._debug_signal: str | None = None
+        self._loop_tracker = LoopTracker({})
         self.explorer = Explorer()
         self.activity = ActivityBar()
 
@@ -217,6 +219,7 @@ class MainWindow(QMainWindow):
         r.run_started.connect(self._on_run_started)
         r.output.connect(self.console.append_out)
         r.run_finished.connect(self._on_run_finished)
+        self.visualizer.frame_selected.connect(self._on_debug_frame_selected)
         d = self.debug_session
         d.stopped.connect(self._on_debug_stopped)
         d.output.connect(self.console.append_out)
@@ -420,6 +423,7 @@ class MainWindow(QMainWindow):
         self.console.set_problem_count(0)
         doc.editor.clear_diagnostics()
         doc.editor.set_debug_mode(True)
+        self._loop_tracker = LoopTracker(find_loops(doc.editor.toPlainText()))
         self._update_debug_actions()
         self.debug_session.start(doc.editor.toPlainText(), self.console.preset_text())
 
@@ -441,8 +445,12 @@ class MainWindow(QMainWindow):
         self.visualizer.show()
         if snap.exited or not snap.frames:
             doc.editor.set_debug_line(None)
+            self.visualizer.set_loops([], {})
         else:
             doc.editor.set_debug_line(snap.line)
+            top = snap.frames[0]
+            values = {v.name: v.value for v in top.args + top.locals}
+            self.visualizer.set_loops(self._loop_tracker.update(len(snap.frames), snap.line), values)
             self.statusBar().showMessage(f"หยุดที่บรรทัด {snap.line} ใน {snap.func}()")
         if snap.signal:
             self._debug_signal = snap.signal
@@ -451,6 +459,10 @@ class MainWindow(QMainWindow):
             if why:
                 self.console.append_block("   → " + why, "err")
         self._update_debug_actions()
+
+    def _on_debug_frame_selected(self, line: int) -> None:
+        if self._debugging and self._debug_doc is not None:
+            self._debug_doc.editor.set_debug_line(line)
 
     def _on_debug_finished(self, code: int, reason: str) -> None:
         if reason == "ok":
@@ -487,6 +499,7 @@ class MainWindow(QMainWindow):
             doc.editor.set_debug_mode(False)
         self.visualizer.clear()
         self.visualizer.hide()
+        self._loop_tracker.reset()
         self._set_busy(False)
         self._update_debug_actions()
         self.statusBar().showMessage("จบการดีบัก")

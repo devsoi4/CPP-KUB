@@ -114,3 +114,27 @@ def test_crash_makes_editor_writable(dwin):
     dwin.a_continue.trigger()
     assert wait_until(lambda: not dwin._debugging)
     assert not dwin.editor.isReadOnly()
+
+
+@needs_gpp
+def test_loop_badge_and_stack_follow_steps(dwin, fake_gdb):
+    set_code(dwin, LOOP_SRC)
+    dwin.start_debug()
+    assert wait_until(lambda: dwin.editor.debug_line == 3)
+    assert dwin.visualizer.loop_label.isHidden()
+    assert dwin.visualizer.stack.count() == 1
+    dwin.a_step_over.trigger()
+    assert wait_until(lambda: dwin.editor.debug_line == 4)
+    dwin.a_step_over.trigger()
+    assert wait_until(lambda: dwin.editor.debug_line == 5)
+    assert not dwin.visualizer.loop_label.isHidden()
+    assert "รอบที่ 1" in dwin.visualizer.loop_label.text()
+
+
+@needs_gpp
+def test_clicking_stack_frame_moves_marker(dwin, fake_gdb):
+    set_code(dwin, LOOP_SRC)
+    dwin.start_debug()
+    assert wait_until(lambda: dwin.editor.debug_line == 3)
+    dwin.visualizer.frame_selected.emit(4)
+    assert dwin.editor.debug_line == 4
