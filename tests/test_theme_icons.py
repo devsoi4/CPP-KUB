@@ -1,0 +1,48 @@
+"""ทดสอบธีม (ชุดสีกลาง) และไอคอน SVG"""
+import os
+import sys
+from pathlib import Path
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import pytest  # noqa: E402
+from PySide6.QtWidgets import QApplication  # noqa: E402
+
+from app import icons, theme  # noqa: E402
+
+NAMES = ["explorer", "run", "stop", "save", "print", "folder", "file", "example"]
+
+
+@pytest.fixture(scope="module")
+def qapp():
+    return QApplication.instance() or QApplication([])
+
+
+def test_palettes_have_same_keys():
+    light, dark = theme.palette(False), theme.palette(True)
+    assert set(light) == set(dark)
+    assert all(v.startswith("#") for v in (*light.values(), *dark.values()))
+
+
+def test_qss_uses_palette_colors():
+    assert theme.palette(True)["bg"] in theme.build_qss(True)
+    assert theme.palette(False)["bg"] in theme.build_qss(False)
+    assert theme.build_qss(True) != theme.build_qss(False)
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_icons_render_for_all_names(qapp, name):
+    img = icons.icon(name, "#ffffff").pixmap(20, 20).toImage()
+    assert any(img.pixelColor(x, y).alpha() > 0 for x in range(20) for y in range(20))
+
+
+def test_icon_color_is_applied(qapp):
+    img = icons.icon("stop", "#ff0000").pixmap(20, 20).toImage()
+    c = img.pixelColor(10, 10)
+    assert c.alpha() > 0 and c.red() > 200 and c.blue() < 60
+
+
+def test_unknown_icon_raises(qapp):
+    with pytest.raises(KeyError):
+        icons.icon("nope", "#fff")
