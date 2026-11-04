@@ -18,7 +18,7 @@ from app.visualizer import session as session_mod  # noqa: E402
 from test_vis_session import LOOP_SRC, Rec, qapp, wait_until  # noqa: E402,F401
 
 FAKE_GDB = r'''
-import re, sys
+import os, re, sys
 step = {"n": 0}
 def out(s):
     sys.stdout.write(s + "\n"); sys.stdout.flush()
@@ -29,8 +29,12 @@ for raw in sys.stdin:
     if not m:
         continue
     tok, cmd = m.group(1), m.group(2)
+    if os.environ.get("FAKE_GDB_LOG"):
+        open(os.environ["FAKE_GDB_LOG"], "a", encoding="utf-8").write(cmd + "\n")
     if cmd.startswith("-exec-run"):
         out(tok + "^running")
+        if os.environ.get("FAKE_GDB_SILENT"):
+            continue
         out('*stopped,reason="breakpoint-hit",frame={func="main",file="main.cpp",line="3"}')
     elif cmd.startswith("-exec-next") or cmd.startswith("-exec-continue"):
         out(tok + "^running")
@@ -39,7 +43,11 @@ for raw in sys.stdin:
             out('*stopped,reason="exited-normally"')
         else:
             stop(3 + step["n"])
+    elif cmd.startswith("-exec-finish") and os.environ.get("FAKE_GDB_ERROR_FINISH"):
+        out(tok + '^error,msg="Cannot finish"')
     elif cmd.startswith("-stack-list-frames"):
+        if os.environ.get("FAKE_GDB_HANG_FRAMES"):
+            continue
         line = 3 + step["n"]
         out(tok + '^done,stack=[frame={level="0",func="main",file="main.cpp",line="%d"},'
             'frame={level="1",func="__libc_start_main",file="crt.c",line="9"}]' % line)
@@ -166,3 +174,68 @@ def test_pointers_resolved_and_heap_pointee_read(qapp, fake_gdb):
         assert by["q"].points_to == PointsTo(0, "a", 1)                      # 0x61ff14 = a[1] (a เริ่มที่ 0x61ff10 ช่องละ 4 ไบต์)
     finally:
         r.session.stop()
+
+
+# ---------- แก้ตามผลตรวจทั้ง branch ----------
+@needs_gpp
+def test_startup_commands_redirect_with_set_args_and_use_utf8(qapp, fake_gdb, tmp_path, monkeypatch):
+    log = tmp_path / "cmds.log"
+    monkeypatch.setenv("FAKE_GDB_LOG", str(log))
+    r = Rec(Runner())
+    try:
+        r.start(LOOP_SRC)
+        cmds = log.read_text(encoding="utf-8").splitlines()
+    finally:
+        r.session.stop()
+    assert any(c.startswith("-gdb-set args <") and "2>&1" in c for c in cmds)
+    assert not any(c.startswith("-exec-arguments") for c in cmds)
+    for want in ("-gdb-set host-charset UTF-8", "-gdb-set target-charset UTF-8", "-gdb-set print elements 200"):
+        assert want in cmds
+
+
+@needs_gpp
+def test_gdb_silent_at_startup_reports_failed_not_timeout(qapp, fake_gdb, monkeypatch):
+    monkeypatch.setenv("FAKE_GDB_SILENT", "1")
+    r = Rec(Runner())
+    r.session.run_timeout_ms = 1500
+    r.session.start(LOOP_SRC)
+    assert wait_until(lambda: r.failed)
+    assert "gdb" in r.failed[0] and r.fin == [] and r.session.active is False
+
+
+@needs_gpp
+def test_hang_while_collecting_snapshot_times_out(qapp, fake_gdb, monkeypatch):
+    monkeypatch.setenv("FAKE_GDB_HANG_FRAMES", "1")
+    r = Rec(Runner())
+    r.session.run_timeout_ms = 1500
+    r.session.start(LOOP_SRC)
+    assert wait_until(lambda: r.fin)
+    assert r.fin == [(-1, "timeout")] and r.failed == []
+
+
+@needs_gpp
+def test_exec_error_frees_the_session(qapp, fake_gdb, monkeypatch):
+    monkeypatch.setenv("FAKE_GDB_ERROR_FINISH", "1")
+    r = Rec(Runner())
+    errors = []
+    r.session.step_error.connect(errors.append)
+    try:
+        r.start(LOOP_SRC)
+        r.session.step_out()
+        assert wait_until(lambda: errors)
+        assert "Cannot finish" in errors[0]
+        assert r.session.busy is False and r.session.active is True
+        r.step("step_over")                                  # ยังเดินต่อได้
+    finally:
+        r.session.stop()
+
+
+@needs_gpp
+def test_unwritable_work_dir_reports_failed(qapp, fake_gdb, monkeypatch):
+    def boom():
+        raise OSError("disk full")
+    monkeypatch.setattr(session_mod, "work_dir", boom)
+    r = Rec(Runner())
+    r.session.start(LOOP_SRC)
+    assert wait_until(lambda: r.failed)
+    assert "disk full" in r.failed[0] and r.session.active is False

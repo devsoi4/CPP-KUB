@@ -18,6 +18,7 @@ from .examples import DEFAULT_CODE, EXAMPLES
 from .sidebar import ActivityBar, Explorer
 from .tabs import DocumentTabs
 from .visualizer.loops import LoopTracker, find_loops
+from .visualizer.model import describe_signal
 from .visualizer.panel import VisualizerPanel
 from .visualizer.session import DebugSession
 
@@ -225,6 +226,7 @@ class MainWindow(QMainWindow):
         d.output.connect(self.console.append_out)
         d.finished.connect(self._on_debug_finished)
         d.failed.connect(self._on_debug_failed)
+        d.step_error.connect(self._on_debug_step_error)
         self.console.input_submitted.connect(r.send_input)
         self.console.eof_requested.connect(r.close_input)
         self.problems.itemActivated.connect(self._goto_problem)
@@ -360,6 +362,9 @@ class MainWindow(QMainWindow):
         self.console.append_info("⏳ กำลังคอมไพล์...")
 
     def _on_problem(self, msg: str) -> None:
+        if self._debugging:
+            self.debug_session.stop(quiet=True)
+            self._end_debug()
         self._set_busy(False)
         self.console.set_input_enabled(False)
         self.statusBar().showMessage("เกิดปัญหา")
@@ -454,10 +459,14 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"หยุดที่บรรทัด {snap.line} ใน {snap.func}()")
         if snap.signal:
             self._debug_signal = snap.signal
-            why = describe_exit(11, True) if snap.signal == "SIGSEGV" else None
+            why = describe_signal(snap.signal)
             self.console.append_info(f"💥 โปรแกรมหยุดทำงานผิดปกติ ({snap.signal})", "err")
             if why:
                 self.console.append_block("   → " + why, "err")
+        self._update_debug_actions()
+
+    def _on_debug_step_error(self, msg: str) -> None:
+        self.console.append_info(f"gdb ทำคำสั่งนี้ไม่ได้: {msg}", "warn")
         self._update_debug_actions()
 
     def _on_debug_frame_selected(self, line: int) -> None:

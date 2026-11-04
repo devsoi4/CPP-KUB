@@ -13,6 +13,7 @@ STD_VALUE_LIMIT = 80       # ชนิด std:: แสดงเป็นข้�
 
 _REPEATS = re.compile(r"^(.*) <repeats (\d+) times>$", re.S)
 _HEX_PREFIX = re.compile(r"^(0x[0-9a-fA-F]+)")
+_OCTAL_RUN = re.compile(r"(?:\\[0-7]{3})+")
 
 
 @dataclass(frozen=True)
@@ -108,6 +109,29 @@ def _braced_inner(text: str) -> str | None:
     return None
 
 
+def _decode_octal(text: str) -> str:
+    """gdb พิมพ์ไบต์ที่ไม่ใช่ ASCII ในสตริงเป็น escape แบบ octal (ตัวอย่าง: แบ็กสแลชตามด้วยเลข 3 หลัก) — ถอดเป็น UTF-8 """
+    def one(m: re.Match) -> str:
+        raw = bytes(int(part, 8) for part in m.group(0).split("\\")[1:])
+        try:
+            return raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return m.group(0)
+    return _OCTAL_RUN.sub(one, text)
+
+
+_SIGNAL_CODES = {"SIGSEGV": 11, "SIGFPE": 8, "SIGABRT": 6}
+
+
+def describe_signal(name: str | None) -> str | None:
+    """คำอธิบายภาษาไทยของ signal ที่ทำให้โปรแกรมหยุด (None ถ้าไม่รู้จัก)"""
+    code = _SIGNAL_CODES.get(name or "")
+    if code is None:
+        return None
+    from ..compiler import describe_exit
+    return describe_exit(code, True)
+
+
 def classify(type_str: str, value: str) -> str:
     t = type_str.strip()
     if t.startswith("std::"):
@@ -127,6 +151,7 @@ def classify(type_str: str, value: str) -> str:
 
 
 def _make(name: str, type_str: str, value: str) -> Var:
+    value = _decode_octal(value)
     kind = classify(type_str, value)
     v = Var(name, type_str, value, kind)
     if kind == "pointer":
@@ -137,7 +162,7 @@ def _make(name: str, type_str: str, value: str) -> Var:
         v.children, v.more = parse_value_text(type_str, value) if type_str else _parse_untyped(value, kind)
     elif type_str.startswith("std::") and len(value) > STD_VALUE_LIMIT:
         v.value = value[:STD_VALUE_LIMIT] + "…"
-    if value.startswith(("<error", "<optimized out>", "<unavailable")):
+    if value.startswith(("<error", "<optimized out>", "<unavailable")) or "<error:" in value:
         v.unreadable = True
     return v
 

@@ -182,3 +182,11 @@ def test_panel_embeds_memory_view(panel):
     panel.show_snapshot(make_snapshot())
     panel.clear()
     assert panel.memory.box_count == 0
+
+
+def test_panel_explains_sigfpe_and_sigabrt_in_thai(panel):
+    for sig in ("SIGFPE", "SIGABRT"):
+        s = make_snapshot()
+        s.signal = sig
+        panel.show_snapshot(s)
+        assert sig in panel.info_label.text() and "—" in panel.info_label.text()

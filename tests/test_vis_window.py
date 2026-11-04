@@ -170,3 +170,19 @@ def test_docs_mention_visualizer_and_gdb():
     readme = (root / "README.md").read_text(encoding="utf-8")
     assert "Visualizer" in readme and "gdb.exe" in readme and "F10" in readme and "app/visualizer/" in readme
     assert "gdb.exe" in (root / "build_windows.bat").read_text(encoding="utf-8", errors="replace")
+
+
+def test_runner_problem_during_debug_ends_debug(dwin, fake_gdb, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    from app import compiler
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: None)
+    monkeypatch.setattr(compiler, "find_compiler", lambda: None)      # Runner.start → problem()
+    dwin.start_debug()
+    assert dwin._debugging is False
+    assert not dwin.editor.isReadOnly() and dwin.a_run.isEnabled() and dwin.a_debug.isEnabled()
+    assert dwin.debug_session.active is False
+
+
+def test_step_error_is_reported_and_actions_refreshed(dwin):
+    dwin.debug_session.step_error.emit("Cannot finish")
+    assert "Cannot finish" in console_text(dwin)

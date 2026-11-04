@@ -183,3 +183,25 @@ def test_element_beyond_shown_cap_points_at_whole_array():
     s = Snapshot([Frame(0, "main", "main.cpp", 1, [], [big, p])])
     resolve_pointer_targets(s)
     assert p.points_to == PointsTo(0, "big", None)
+
+
+# ---------- แก้ตามผลตรวจทั้ง branch ----------
+def test_octal_escapes_in_string_values_are_decoded():
+    v = build_var({"name": "s", "type": "char [10]", "value": r'"\340\270\252\340\270\247"'})
+    assert v.value == '"สว"'
+    c = build_var({"name": "c", "type": "char", "value": r"97 'a'"})
+    assert c.value == "97 'a'"
+    esc = build_var({"name": "t", "type": "char [4]", "value": r'"a\nb"'})
+    assert esc.value == r'"a\nb"'                       # \n ที่ไม่ใช่ octal คงเดิม
+
+
+def test_char_pointer_with_error_text_is_unreadable():
+    v = build_var({"name": "s", "type": "char *", "value": "0x1234 <error: Cannot access memory at address 0x1234>"})
+    assert v.unreadable is True and v.target == 0x1234
+
+
+def test_describe_signal():
+    from app.visualizer.model import describe_signal
+    for sig in ("SIGSEGV", "SIGFPE", "SIGABRT"):
+        assert describe_signal(sig)
+    assert describe_signal("SIGINT") is None and describe_signal(None) is None

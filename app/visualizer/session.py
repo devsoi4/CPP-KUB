@@ -36,6 +36,7 @@ class DebugSession(QObject):
     output = Signal(str)            # ข้อความที่โปรแกรมพิมพ์ออกมาใหม่
     finished = Signal(int, str)     # exit code, เหตุผล: ok|crash|stopped|step_limit|timeout|gdb_died
     failed = Signal(str)            # เริ่มดีบักไม่ได้ (ไม่มี gdb ฯลฯ)
+    step_error = Signal(str)        # คำสั่งเดิน/รันต่อที่ gdb ปฏิเสธ (session ยังอยู่ เดินต่อได้)
 
     def __init__(self, runner: Runner, parent: QObject | None = None):
         super().__init__(parent)
@@ -56,6 +57,7 @@ class DebugSession(QObject):
         self._finish_tries = 0
         self._signal: str | None = None
         self._crashed = False
+        self._seen_stop = False
         self._out_path: Path | None = None
         self._out_pos = 0
         self._dec = codecs.getincrementaldecoder("utf-8")(errors="replace")
@@ -97,6 +99,7 @@ class DebugSession(QObject):
         self._finish_tries = 0
         self._signal = None
         self._crashed = False
+        self._seen_stop = False
         self._out_pos = 0
         self._dec.reset()
 
@@ -137,15 +140,22 @@ class DebugSession(QObject):
         self._starting = False
         exe = self.runner.exe_path
         gdb = find_gdb()
-        if not ok or exe is None or gdb is None:
+        if not ok:                       # คอมไพล์ไม่ผ่าน: หน้าต่างหลักแสดง error ให้แล้ว
             self._done = True
             self._busy = False
             return
-        wd = work_dir()
-        in_path = wd / "debug_in.txt"
-        self._out_path = wd / "debug_out.txt"
-        in_path.write_text(self._preset, encoding="utf-8", newline="")
-        self._out_path.write_text("", encoding="utf-8")
+        if exe is None or gdb is None:
+            self._fail_start("ไม่พบไฟล์โปรแกรมที่คอมไพล์แล้ว หรือไม่พบ gdb")
+            return
+        try:
+            wd = work_dir()
+            in_path = wd / "debug_in.txt"
+            self._out_path = wd / "debug_out.txt"
+            in_path.write_text(self._preset, encoding="utf-8", newline="")
+            self._out_path.write_text("", encoding="utf-8")
+        except OSError as e:
+            self._fail_start(f"เตรียมไฟล์สำหรับดีบักไม่สำเร็จ: {e}")
+            return
         proc = QProcess(self)
         env = QProcessEnvironment.systemEnvironment()
         sep = ";" if IS_WINDOWS else ":"
@@ -166,12 +176,18 @@ class DebugSession(QObject):
         proc.start(gdb, ["--interpreter=mi3", "-q", "--nx"])
         fwd = lambda p: str(p).replace("\\", "/")  # noqa: E731
         for cmd in ("-gdb-set confirm off", "-gdb-set pagination off", "-gdb-set print pretty off",
+                    "-gdb-set host-charset UTF-8", "-gdb-set target-charset UTF-8",
+                    "-gdb-set print elements 200",
                     f'-file-exec-and-symbols "{fwd(exe)}"',
-                    f'-exec-arguments < "{fwd(in_path)}" > "{fwd(self._out_path)}" 2>&1',
+                    f'-gdb-set args < "{fwd(in_path)}" > "{fwd(self._out_path)}" 2>&1',
                     "-break-insert -t main"):
             self._enqueue(cmd, None)
         self._enqueue("-exec-run", None)
         self._arm_timer()
+
+    def _fail_start(self, msg: str) -> None:
+        self._shutdown()
+        self.failed.emit(msg)
 
     def _on_gdb_error(self, err) -> None:
         if err == QProcess.FailedToStart and not self._done:
@@ -242,9 +258,13 @@ class DebugSession(QObject):
         self._timer.start(self.run_timeout_ms)
 
     def _on_timeout(self) -> None:
-        if not self._done and self._busy:
-            self._read_output()
-            self._end(-1, "timeout")
+        if self._done or not self._busy:
+            return
+        if not self._seen_stop:          # ไม่เคยหยุดที่ main เลย: gdb ไม่ตอบ (เช่น ขาด DLL แล้ว Windows เด้งกล่อง error)
+            self._fail_start("gdb เริ่มทำงานไม่ได้หรือไม่ตอบสนอง — ตรวจว่า compiler\\bin มี gdb.exe และไฟล์ที่ gdb ใช้ครบ")
+            return
+        self._read_output()
+        self._end(-1, "timeout")
 
     def _issue(self, kind: str, cmd: str) -> None:
         if self._done or self._busy or self._proc is None:
@@ -257,7 +277,14 @@ class DebugSession(QObject):
         self._finish_tries = 0
         self._busy = True
         self._arm_timer()
-        self._enqueue(cmd, None)
+        self._enqueue(cmd, self._on_exec_result)
+
+    def _on_exec_result(self, r: Record | None) -> None:
+        """ผลของคำสั่งเดิน/รันต่อ: ถ้า gdb ปฏิเสธ (^error) ต้องคืนสถานะว่าง ไม่งั้นปุ่มเดินจะค้างจนหมดเวลา"""
+        if r is not None and r.cls == "error":
+            self._timer.stop()
+            self._busy = False
+            self.step_error.emit(str(r.data.get("msg", "")))
 
     def step_over(self) -> None:
         self._issue("over", "-exec-next")
@@ -287,6 +314,7 @@ class DebugSession(QObject):
 
     def _on_stopped(self, data: dict) -> None:
         self._timer.stop()
+        self._seen_stop = True
         reason = data.get("reason", "")
         if reason.startswith("exited"):
             self._on_exited(reason, data)
@@ -301,9 +329,9 @@ class DebugSession(QObject):
             self._arm_timer()
             if self._kind == "into" and self._finish_tries < 5:
                 self._finish_tries += 1
-                self._enqueue("-exec-finish", None)
+                self._enqueue("-exec-finish", self._on_exec_result)
             else:
-                self._enqueue("-exec-continue", None)
+                self._enqueue("-exec-continue", self._on_exec_result)
             return
         self._collect()
 
@@ -350,12 +378,14 @@ class DebugSession(QObject):
             self._enqueue_front(items)
 
         def emit(snap: model.Snapshot) -> None:
+            self._timer.stop()
             model.mark_changes(self._prev, snap)
             self._prev = snap
             self._busy = False
             self._read_output()
             self.stopped.emit(snap)
 
+        self._arm_timer()                # gdb ค้างระหว่างเก็บข้อมูลก็ต้องหมดเวลา ไม่ให้หน้าจอค้างตลอดไป
         self._enqueue(f"-stack-list-frames 0 {MAX_FRAMES - 1}", on_frames)
 
     def _on_vars(self, fr: dict, frames: list[model.Frame]) -> Callable:

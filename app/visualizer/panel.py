@@ -8,10 +8,9 @@ from PySide6.QtWidgets import (
 )
 
 from .. import theme
-from ..compiler import describe_exit
 from .loops import LoopStatus
 from .memory_view import MemoryView
-from .model import Frame, Snapshot, Var
+from .model import Frame, Snapshot, Var, describe_signal
 
 UNREADABLE_TEXT = "อ่านไม่ได้"
 
@@ -58,7 +57,7 @@ class VisualizerPanel(QWidget):
             self.info_label.setText(f"โปรแกรมจบด้วยรหัส {snap.exit_code}")
             return
         if snap.signal:
-            why = describe_exit(11, True) if snap.signal == "SIGSEGV" else None
+            why = describe_signal(snap.signal)
             self.info_label.setText(f"โปรแกรมหยุดผิดปกติ ({snap.signal})" + (f" — {why}" if why else ""))
         elif snap.frames:
             self.info_label.setText(f"บรรทัด {snap.line} · {snap.func}()")
