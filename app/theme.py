@@ -20,7 +20,9 @@ def palette(dark: bool) -> dict[str, str]:
 
 
 def build_qss(dark: bool) -> str:
+    from . import icons
     p = palette(dark)
+    p["close_icon"], p["close_icon_hover"] = icons.close_icon_files(p["muted"], p["text"])
     return """
 QWidget {{ background:{bg}; color:{text}; }}
 QMainWindow, QMenuBar, QMenu, QToolBar, QStatusBar {{ background:{panel}; }}
@@ -49,8 +51,8 @@ QTabBar::tab {{ background:{tab_inactive}; color:{muted}; padding:7px 14px;
     border-right:1px solid {border}; border-top:2px solid transparent; }}
 QTabBar::tab:selected {{ background:{tab_active}; color:{text}; border-top:2px solid {accent}; }}
 QTabBar::tab:hover:!selected {{ background:{hover}; }}
-QTabBar::close-button {{ subcontrol-position:right; border-radius:3px; }}
-QTabBar::close-button:hover {{ background:{border}; }}
+QTabBar::close-button {{ image:url({close_icon}); subcontrol-position:right; border-radius:3px; margin:0 2px; }}
+QTabBar::close-button:hover {{ image:url({close_icon_hover}); background:{border}; }}
 QSplitter::handle {{ background:{border}; }}
 QSplitter::handle:horizontal {{ width:1px; }}
 QSplitter::handle:vertical {{ height:1px; }}

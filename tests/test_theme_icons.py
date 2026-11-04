@@ -46,3 +46,13 @@ def test_icon_color_is_applied(qapp):
 def test_unknown_icon_raises(qapp):
     with pytest.raises(KeyError):
         icons.icon("nope", "#fff")
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_close_button_icons_are_in_stylesheet_and_exist(qapp, dark):
+    import re
+    qss = theme.build_qss(dark)
+    urls = re.findall(r"QTabBar::close-button[^{]*\{[^}]*image:\s*url\(([^)]+)\)", qss)
+    assert len(urls) == 2                         # ปกติ + ตอนเอาเมาส์ชี้
+    for u in urls:
+        assert Path(u).is_file() and Path(u).stat().st_size > 0

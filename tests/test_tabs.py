@@ -178,3 +178,23 @@ def test_activity_toggle_emits(qapp):
     bar.explorer_toggled.connect(got.append)
     bar.explorer_btn.click()
     assert got == [False]       # เริ่มต้นเปิดอยู่ คลิกแล้วปิด
+
+
+def test_every_tab_has_a_visible_close_button_that_requests_close(qapp):
+    from PySide6.QtWidgets import QTabBar
+    from app import theme
+    qapp.setStyleSheet(theme.build_qss(False))
+    try:
+        t = DocumentTabs()
+        t.resize(600, 300)
+        a, b = make(t), make(t)
+        t.show()
+        got = []
+        t.close_requested.connect(got.append)
+        for i, doc in enumerate((a, b)):
+            btn = t.tabBar().tabButton(i, QTabBar.RightSide)
+            assert btn is not None and btn.isVisible() and btn.width() >= 12
+        QTest.mouseClick(t.tabBar().tabButton(0, QTabBar.RightSide), Qt.LeftButton)
+        assert got == [a]
+    finally:
+        qapp.setStyleSheet("")
