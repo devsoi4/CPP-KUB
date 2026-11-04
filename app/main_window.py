@@ -17,6 +17,8 @@ from .document import Document
 from .examples import DEFAULT_CODE, EXAMPLES
 from .sidebar import ActivityBar, Explorer
 from .tabs import DocumentTabs
+from .visualizer.panel import VisualizerPanel
+from .visualizer.session import DebugSession
 
 APP_NAME = "Cpp-Kub"
 FILTER = "ไฟล์ C++ (*.cpp *.cc *.cxx *.h *.hpp);;ทุกไฟล์ (*)"
@@ -37,6 +39,12 @@ class MainWindow(QMainWindow):
         self.console = ConsoleWidget()
         self.problems = self.console.problems
         self.runner = Runner(self)
+        self.debug_session = DebugSession(self.runner, self)
+        self.visualizer = VisualizerPanel()
+        self.visualizer.hide()
+        self._debugging = False
+        self._debug_doc: Document | None = None
+        self._debug_signal: str | None = None
         self.explorer = Explorer()
         self.activity = ActivityBar()
 
@@ -48,7 +56,8 @@ class MainWindow(QMainWindow):
         self.main_split = QSplitter(Qt.Horizontal)
         self.main_split.addWidget(self.explorer)
         self.main_split.addWidget(right)
-        self.main_split.setSizes([240, 960])
+        self.main_split.addWidget(self.visualizer)
+        self.main_split.setSizes([240, 720, 340])
         self.main_split.setCollapsible(1, False)
         central = QWidget()
         lay = QHBoxLayout(central)
@@ -119,6 +128,19 @@ class MainWindow(QMainWindow):
         self.a_run = self._act("รัน (F5)", self.run_code, "F5", "คอมไพล์และรันโปรแกรม")
         self.a_stop = self._act("หยุด", self.stop_run, "Shift+F5", "หยุดโปรแกรมที่กำลังรัน")
         self.a_stop.setEnabled(False)
+        self.a_debug = self._act("ดีบัก (F9)", self.start_debug, "F9",
+                                 "เริ่มดีบัก: เดินโปรแกรมทีละบรรทัดและดูค่าตัวแปร")
+        self.a_step_over = self._act("ข้ามบรรทัด (F10)", lambda: self._debug_step(self.debug_session.step_over),
+                                     "F10", "ทำบรรทัดนี้แล้วไปบรรทัดถัดไป (ไม่เข้าไปในฟังก์ชัน)")
+        self.a_step_into = self._act("เข้าฟังก์ชัน (F11)", lambda: self._debug_step(self.debug_session.step_into),
+                                     "F11", "เข้าไปในฟังก์ชันที่บรรทัดนี้เรียก")
+        self.a_step_out = self._act("ออกจากฟังก์ชัน (Shift+F11)",
+                                    lambda: self._debug_step(self.debug_session.step_out),
+                                    "Shift+F11", "รันจนจบฟังก์ชันนี้แล้วกลับไปที่ผู้เรียก")
+        self.a_continue = self._act("ทำต่อ (F8)", lambda: self._debug_step(self.debug_session.resume), "F8",
+                                    "รันต่อไปจนจบโปรแกรม")
+        for a in (self.a_step_over, self.a_step_into, self.a_step_out, self.a_continue):
+            a.setEnabled(False)
         self.a_next_tab = self._act("แท็บถัดไป", lambda: self._cycle_tab(+1), "Ctrl+Tab")
         self.a_prev_tab = self._act("แท็บก่อนหน้า", lambda: self._cycle_tab(-1), "Ctrl+Shift+Tab")
         self.a_toggle_explorer = self._act("แสดง/ซ่อน Explorer", self.activity.explorer_btn.toggle, "Ctrl+B")
@@ -154,6 +176,11 @@ class MainWindow(QMainWindow):
         m.addAction(self.a_run)
         m.addAction(self.a_stop)
         m.addAction(self.a_clear)
+        m = mb.addMenu("ดีบัก")
+        for a in (self.a_debug, self.a_step_over, self.a_step_into, self.a_step_out, self.a_continue):
+            m.addAction(a)
+        m.addSeparator()
+        m.addAction(self.a_stop)
         m = mb.addMenu("ตัวอย่างโค้ด")
         for title, code in EXAMPLES:
             m.addAction(title, lambda c=code, t=title: self.load_example(t, c))
@@ -169,6 +196,9 @@ class MainWindow(QMainWindow):
         self.addToolBar(self.toolbar)
         self.toolbar.addAction(self.a_run)
         self.toolbar.addAction(self.a_stop)
+        self.toolbar.addSeparator()
+        for a in (self.a_debug, self.a_step_over, self.a_step_into, self.a_step_out, self.a_continue):
+            self.toolbar.addAction(a)
         self.toolbar.addSeparator()
         self.toolbar.addAction(self.a_save)
         self.toolbar.addAction(self.a_print)
@@ -187,6 +217,11 @@ class MainWindow(QMainWindow):
         r.run_started.connect(self._on_run_started)
         r.output.connect(self.console.append_out)
         r.run_finished.connect(self._on_run_finished)
+        d = self.debug_session
+        d.stopped.connect(self._on_debug_stopped)
+        d.output.connect(self.console.append_out)
+        d.finished.connect(self._on_debug_finished)
+        d.failed.connect(self._on_debug_failed)
         self.console.input_submitted.connect(r.send_input)
         self.console.eof_requested.connect(r.close_input)
         self.problems.itemActivated.connect(self._goto_problem)
@@ -298,6 +333,11 @@ class MainWindow(QMainWindow):
 
     def stop_run(self) -> None:
         """หยุดคอมไพล์/โปรแกรมที่รันอยู่ — Runner.stop() ไม่ส่งสัญญาณเมื่อยกเลิกระหว่างคอมไพล์ จึงต้องปิดสถานะ busy เอง"""
+        if self._debugging:
+            self.runner.stop()
+            self.debug_session.stop()
+            self._end_debug()
+            return
         was_compiling = self.runner.is_compiling
         self.runner.stop()
         if was_compiling:
@@ -305,6 +345,7 @@ class MainWindow(QMainWindow):
 
     def _set_busy(self, busy: bool) -> None:
         self.a_run.setEnabled(not busy)
+        self.a_debug.setEnabled(not busy)
         self.a_stop.setEnabled(busy)
         if not busy:
             self.tabs.set_running(None)
@@ -351,7 +392,7 @@ class MainWindow(QMainWindow):
             self.console.append_info(msg, "ok")
             if n_warn:
                 self.console.append_block(format_report(diags), "warn")
-            self.console.append_info("▶ เริ่มรันโปรแกรม", "info")
+            self.console.append_info("🐞 เริ่มดีบัก" if self._debugging else "▶ เริ่มรันโปรแกรม", "info")
         else:
             self._set_busy(False)
             self.statusBar().showMessage(f"คอมไพล์ไม่ผ่าน ({n_err} ข้อผิดพลาด)")
@@ -361,6 +402,94 @@ class MainWindow(QMainWindow):
             first = next((d for d in diags if d.kind == "error" and d.line), None)
             if first and run_doc is not None:
                 run_doc.editor.goto_line(first.line)
+            if self._debugging:
+                self._end_debug()
+
+    # ---------- ดีบัก (Visualizer) ----------
+    def start_debug(self) -> None:
+        doc = self.doc
+        if doc is None or self.runner.busy or self._debugging:
+            return
+        self._debugging = True
+        self._debug_doc = doc
+        self._debug_signal = None
+        self._run_doc = doc
+        self.tabs.set_running(doc)
+        self.console.clear()
+        self.problems.clear()
+        self.console.set_problem_count(0)
+        doc.editor.clear_diagnostics()
+        doc.editor.set_debug_mode(True)
+        self._update_debug_actions()
+        self.debug_session.start(doc.editor.toPlainText(), self.console.preset_text())
+
+    def _debug_step(self, step) -> None:
+        step()
+        self._update_debug_actions()
+
+    def _update_debug_actions(self) -> None:
+        s = self.debug_session
+        live = self._debugging and s.active and not s.busy
+        for a in (self.a_step_over, self.a_step_into, self.a_step_out, self.a_continue):
+            a.setEnabled(live)
+
+    def _on_debug_stopped(self, snap) -> None:
+        doc = self._debug_doc
+        if doc is None:
+            return
+        self.visualizer.show_snapshot(snap)
+        self.visualizer.show()
+        if snap.exited or not snap.frames:
+            doc.editor.set_debug_line(None)
+        else:
+            doc.editor.set_debug_line(snap.line)
+            self.statusBar().showMessage(f"หยุดที่บรรทัด {snap.line} ใน {snap.func}()")
+        if snap.signal:
+            self._debug_signal = snap.signal
+            why = describe_exit(11, True) if snap.signal == "SIGSEGV" else None
+            self.console.append_info(f"💥 โปรแกรมหยุดทำงานผิดปกติ ({snap.signal})", "err")
+            if why:
+                self.console.append_block("   → " + why, "err")
+        self._update_debug_actions()
+
+    def _on_debug_finished(self, code: int, reason: str) -> None:
+        if reason == "ok":
+            self.console.append_info(f"● โปรแกรมทำงานจบ (exit code {code})", "ok" if code == 0 else "warn")
+        elif reason == "crash":
+            if self._debug_signal is None:
+                self.console.append_info("💥 โปรแกรมหยุดทำงานผิดปกติ", "err")
+                why = describe_exit(code, True)
+                if why:
+                    self.console.append_block("   → " + why, "err")
+        elif reason == "stopped":
+            self.console.append_info("■ หยุดดีบัก", "warn")
+        elif reason == "timeout":
+            secs = self.debug_session.run_timeout_ms // 1000
+            self.console.append_info(
+                f"⏱ หยุดโปรแกรม: ไม่มีความเคลื่อนไหวเกิน {secs} วินาที (อาจวนลูปไม่รู้จบ)", "warn")
+        elif reason == "step_limit":
+            self.console.append_info("หยุดดีบัก: เดินครบ 100,000 ขั้นแล้ว (อาจมีลูปไม่รู้จบ)", "warn")
+        elif reason == "gdb_died":
+            self.console.append_info("ตัวดีบั๊ก (gdb) หยุดทำงานกะทันหัน", "err")
+        self._end_debug()
+
+    def _on_debug_failed(self, msg: str) -> None:
+        self.console.append_info(msg, "err")
+        self.statusBar().showMessage("เริ่มดีบักไม่ได้")
+        self._end_debug()
+
+    def _end_debug(self) -> None:
+        if not self._debugging:
+            return
+        self._debugging = False
+        doc, self._debug_doc = self._debug_doc, None
+        if doc is not None:
+            doc.editor.set_debug_mode(False)
+        self.visualizer.clear()
+        self.visualizer.hide()
+        self._set_busy(False)
+        self._update_debug_actions()
+        self.statusBar().showMessage("จบการดีบัก")
 
     def _on_run_started(self) -> None:
         self.statusBar().showMessage("กำลังรันโปรแกรม...")
@@ -586,6 +715,7 @@ class MainWindow(QMainWindow):
         self.console.set_dark(self.dark)
         self.explorer.set_dark(self.dark)
         self.activity.set_dark(self.dark)
+        self.visualizer.set_dark(self.dark)
         self._refresh_icons()
 
     def _about(self) -> None:
@@ -632,5 +762,6 @@ class MainWindow(QMainWindow):
             if not self._confirm_discard(doc):
                 e.ignore()
                 return
+        self.debug_session.stop(quiet=True)
         self.runner.stop()
         e.accept()
