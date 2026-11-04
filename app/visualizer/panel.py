@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 from .. import theme
 from ..compiler import describe_exit
 from .loops import LoopStatus
+from .memory_view import MemoryView
 from .model import Frame, Snapshot, Var
 
 UNREADABLE_TEXT = "อ่านไม่ได้"
@@ -37,7 +38,9 @@ class VisualizerPanel(QWidget):
         self.variables.setUniformRowHeights(True)
         self.split = QSplitter(Qt.Vertical)
         self.split.addWidget(self.stack)
+        self.memory = MemoryView()
         self.split.addWidget(self.variables)
+        self.split.addWidget(self.memory)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
@@ -50,6 +53,7 @@ class VisualizerPanel(QWidget):
         self._snapshot = snap
         self.variables.clear()
         self.stack.clear()
+        self.memory.show_snapshot(snap)
         if snap.exited:
             self.info_label.setText(f"โปรแกรมจบด้วยรหัส {snap.exit_code}")
             return
@@ -90,11 +94,13 @@ class VisualizerPanel(QWidget):
         self._snapshot = None
         self.variables.clear()
         self.stack.clear()
+        self.memory.clear()
         self.info_label.setText("")
         self.set_loops([], {})
 
     def set_dark(self, dark: bool) -> None:
         self._dark = dark
+        self.memory.set_dark(dark)
         if self._snapshot is not None:
             self.show_snapshot(self._snapshot)
 

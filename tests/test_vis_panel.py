@@ -172,3 +172,13 @@ def test_exited_snapshot_clears_stack(panel):
     panel.show_snapshot(make_recursion_snapshot())
     panel.show_snapshot(Snapshot([], exited=True, exit_code=0))
     assert panel.stack.count() == 0
+
+
+def test_panel_embeds_memory_view(panel):
+    panel.show_snapshot(make_snapshot())
+    assert panel.memory.box_count > 0
+    panel.show_snapshot(Snapshot([], exited=True, exit_code=0))
+    assert panel.memory.box_count == 0
+    panel.show_snapshot(make_snapshot())
+    panel.clear()
+    assert panel.memory.box_count == 0
