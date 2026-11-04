@@ -27,7 +27,8 @@ def qapp():
 def win(qapp):
     w = MainWindow()
     yield w
-    w.editor.document().setModified(False)
+    for d in w.tabs.documents():
+        d.editor.document().setModified(False)
     w.runner.stop()
     w.close()
 
@@ -215,3 +216,115 @@ def test_console_preset_roundtrip(win):
     assert win.console.preset_text() == "a\nb" and win.console.preset_eof()
     win.console.set_preset("", False)
     assert win.console.preset_text() == "" and not win.console.preset_eof()
+
+
+# ---------- แท็บหลายไฟล์ ----------
+def _titles(w):
+    return [d.title() for d in w.tabs.documents()]
+
+
+def test_new_file_opens_second_tab(win):
+    win.new_file()
+    assert _titles(win) == ["ไม่มีชื่อ-1", "ไม่มีชื่อ-2"]
+    assert win.doc is win.tabs.documents()[1]
+
+
+def test_open_same_file_twice_activates_existing(win, tmp_path):
+    f = tmp_path / "a.cpp"
+    f.write_text("int main(){}", encoding="utf-8")
+    win.open_path(f)
+    win.new_file()
+    n = win.tabs.count()
+    win.open_path(tmp_path / "." / "a.cpp")
+    assert win.tabs.count() == n and win.path == f
+
+
+def test_lone_pristine_untitled_is_replaced_on_open(win, tmp_path):
+    f = tmp_path / "b.cpp"
+    f.write_text("// b", encoding="utf-8")
+    win.open_path(f)
+    assert _titles(win) == ["b.cpp"] and win.editor.toPlainText() == "// b"
+
+
+def test_close_modified_tab_prompts_and_cancel_keeps_it(win, monkeypatch):
+    win.editor.insertPlainText("x")
+    doc = win.doc
+    monkeypatch.setattr(win, "_ask_save", lambda d: "cancel")
+    assert win.close_document(doc) is False
+    assert win.tabs.documents() == [doc]
+    monkeypatch.setattr(win, "_ask_save", lambda d: "discard")
+    assert win.close_document(doc) is True
+
+
+def test_closing_last_tab_creates_fresh_untitled(win):
+    old = win.doc
+    assert win.close_document(old) is True
+    assert win.tabs.count() == 1 and win.doc is not old and win.doc.path is None
+
+
+def test_per_tab_preset_swaps(win):
+    win.console.set_preset("A", True)
+    win.new_file()
+    assert win.console.preset_text() == "" and not win.console.preset_eof()
+    win.tabs.setCurrentIndex(0)
+    assert win.console.preset_text() == "A" and win.console.preset_eof()
+
+
+def test_open_missing_file_warns_not_raises(win, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+    shown = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: shown.append(a))
+    n = win.tabs.count()
+    win.open_path(tmp_path / "gone.cpp")
+    assert shown and win.tabs.count() == n
+
+
+def test_title_follows_active_tab(win, tmp_path):
+    f = tmp_path / "ทดสอบ.cpp"
+    f.write_text("", encoding="utf-8")
+    win.open_path(f)
+    assert "ทดสอบ.cpp" in win.windowTitle()
+    win.new_file()
+    assert "ไม่มีชื่อ-2" in win.windowTitle()
+
+
+def test_save_clears_modified_marker(win, tmp_path, monkeypatch):
+    win.editor.insertPlainText("x")
+    assert win.tabs.tabText(0).startswith("● ")
+    monkeypatch.setattr(win, "_choose_save_path", lambda doc: tmp_path / "s.cpp")
+    assert win.save_file() is True
+    assert win.tabs.tabText(0) == "s.cpp" and (tmp_path / "s.cpp").exists()
+
+
+@needs_gpp
+def test_run_uses_active_tab_and_marks_that_editor(win):
+    first = win.doc
+    win.new_file()
+    second = win.doc
+    second.editor.setPlainText("int main() { int x = ; }")
+    win.run_code()
+    assert wait_until(lambda: finished(win) and win.problems.count() > 0)
+    assert second.editor._error_lines and not first.editor._error_lines
+    assert win.console.tabs.tabText(1).startswith("ปัญหา (")
+
+
+@needs_gpp
+def test_close_running_tab_stops_runner_without_crash(win):
+    from app.examples import EXAMPLES
+    win.load_example("t", dict(EXAMPLES)["03 บวกเลขสองจำนวน"])
+    running = win.doc
+    win.run_code()
+    assert wait_until(lambda: "ใส่เลขตัวที่ 1:" in win.console.output.toPlainText())
+    win.new_file()
+    assert win.close_document(running) is True
+    assert wait_until(lambda: finished(win))
+    assert win._run_doc is None
+
+
+@needs_gpp
+def test_run_finishing_after_close_does_not_crash(win):
+    win.new_file()
+    doc = win.doc
+    win.run_code()
+    win.close_document(doc)
+    assert wait_until(lambda: finished(win))
