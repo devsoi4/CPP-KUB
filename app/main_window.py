@@ -51,17 +51,9 @@ class MainWindow(QMainWindow):
         split.setSizes([480, 300])
         self.setCentralWidget(split)
 
-        self.problems = QListWidget()
-        self.problems.setWordWrap(True)
-        self.problems.setResizeMode(QListWidget.Adjust)
-        self.problems.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.problems = self.console.problems
         self.problems.itemActivated.connect(self._goto_problem)
         self.problems.itemClicked.connect(self._goto_problem)
-        dock = QDockWidget("ปัญหาที่พบ (อธิบายเป็นภาษาไทย)", self)
-        dock.setWidget(self.problems)
-        dock.setFeatures(QDockWidget.DockWidgetMovable | QDockWidget.DockWidgetFloatable)
-        self.addDockWidget(Qt.RightDockWidgetArea, dock)
-        dock.setMinimumWidth(320)
 
         self._build_actions()
         self._build_menus()

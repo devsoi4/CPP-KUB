@@ -1,10 +1,10 @@
 """หน้าต่างผลลัพธ์ (stdout/stderr) + ช่องพิมพ์ข้อมูลนำเข้า (stdin) รองรับภาษาไทย"""
 from __future__ import annotations
 
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
-    QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton, QTabWidget,
+    QHBoxLayout, QLabel, QLineEdit, QListWidget, QPlainTextEdit, QPushButton, QTabWidget,
     QVBoxLayout, QWidget,
 )
 
@@ -67,8 +67,14 @@ class ConsoleWidget(QWidget):
         pl.addWidget(self.preset, 1)
         pl.addWidget(self.preset_auto_eof)
 
+        self.problems = QListWidget()
+        self.problems.setWordWrap(True)
+        self.problems.setResizeMode(QListWidget.Adjust)
+        self.problems.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+
         self.tabs = QTabWidget()
         self.tabs.addTab(run_tab, "ผลลัพธ์")
+        self.tabs.addTab(self.problems, "ปัญหา")
         self.tabs.addTab(preset_tab, "ข้อมูลนำเข้าล่วงหน้า")
 
         outer = QVBoxLayout(self)
@@ -90,8 +96,21 @@ class ConsoleWidget(QWidget):
     def preset_text(self) -> str:
         return self.preset.toPlainText()
 
+    def preset_eof(self) -> bool:
+        return self.preset_auto_eof.isChecked()
+
+    def set_preset(self, text: str, eof: bool) -> None:
+        self.preset.setPlainText(text)
+        self.preset_auto_eof.setChecked(eof)
+
+    def set_problem_count(self, n: int) -> None:
+        self.tabs.setTabText(1, f"ปัญหา ({n})" if n else "ปัญหา")
+
+    def show_problems(self) -> None:
+        self.tabs.setCurrentIndex(1)
+
     def set_font_size(self, size: int) -> None:
-        for w in (self.output, self.input, self.preset):
+        for w in (self.output, self.input, self.preset, self.problems):
             w.setFont(code_font(size))
 
     # ---------- แสดงข้อความ ----------

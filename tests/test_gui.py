@@ -196,3 +196,22 @@ def test_console_input_line_accepts_thai(win):
     ev.setCommitString("สมชาย ใจดี")
     QApplication.sendEvent(win.console.input, ev)
     assert win.console.input.text() == "สมชาย ใจดี"
+
+
+def test_console_problem_tab_title_counts(win):
+    tabs = win.console.tabs
+    names = [tabs.tabText(i) for i in range(tabs.count())]
+    assert names == ["ผลลัพธ์", "ปัญหา", "ข้อมูลนำเข้าล่วงหน้า"]
+    win.console.set_problem_count(3)
+    assert tabs.tabText(1) == "ปัญหา (3)"
+    win.console.set_problem_count(0)
+    assert tabs.tabText(1) == "ปัญหา"
+    win.console.show_problems()
+    assert tabs.currentIndex() == 1
+
+
+def test_console_preset_roundtrip(win):
+    win.console.set_preset("a\nb", True)
+    assert win.console.preset_text() == "a\nb" and win.console.preset_eof()
+    win.console.set_preset("", False)
+    assert win.console.preset_text() == "" and not win.console.preset_eof()
