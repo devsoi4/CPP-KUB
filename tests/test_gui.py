@@ -389,3 +389,16 @@ def test_session_restores_explorer_state(win, tmp_path):
         assert w2.explorer.folder == str(tmp_path)
     finally:
         _close_clean(w2)
+
+
+def test_preset_sent_belongs_to_run_tab_not_visible_tab(win, monkeypatch):
+    sent = []
+    monkeypatch.setattr(win.runner, "start", lambda src: None)
+    monkeypatch.setattr(win.runner, "send_input", sent.append)
+    monkeypatch.setattr(win.runner, "close_input", lambda: sent.append("EOF"))
+    win.console.set_preset("5", True)
+    win.run_code()
+    win.new_file()                              # สลับไปแท็บอื่นระหว่างคอมไพล์
+    win.console.set_preset("999", False)
+    win._on_run_started()
+    assert sent == ["5\n", "EOF"]

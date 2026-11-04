@@ -30,6 +30,7 @@ class MainWindow(QMainWindow):
         self.dark = self.settings.value("dark", False, type=bool)
         self._font_size = self.settings.value("font_size", 13, type=int)
         self._run_doc: Document | None = None      # เอกสารที่รันล่าสุด (ใช้ระบายสีบรรทัด/กระโดดไปบรรทัดที่ผิด)
+        self._run_preset: tuple[str, bool] = ("", False)
         self._shown_doc: Document | None = None    # เอกสารที่เจ้าของข้อมูลล่วงหน้าตอนนี้อยู่ในแผงล่าง
 
         self.tabs = DocumentTabs()
@@ -287,6 +288,7 @@ class MainWindow(QMainWindow):
         if doc is None or self.runner.busy:
             return
         self._run_doc = doc
+        self._run_preset = (self.console.preset_text(), self.console.preset_eof())   # ของแท็บที่กดรัน ไม่ใช่แท็บที่เห็นตอนเริ่มรันจริง
         self.tabs.set_running(doc)
         self.console.clear()
         self.problems.clear()
@@ -363,7 +365,7 @@ class MainWindow(QMainWindow):
     def _on_run_started(self) -> None:
         self.statusBar().showMessage("กำลังรันโปรแกรม...")
         self.console.set_input_enabled(True)
-        preset = self.console.preset_text()
+        preset, auto_eof = self._run_preset
         if preset.strip():
             data = preset if preset.endswith("\n") else preset + "\n"
             shown = " ⏎ ".join(data.rstrip("\n").split("\n"))
@@ -371,7 +373,7 @@ class MainWindow(QMainWindow):
                 shown = shown[:80] + "…"
             self.console.append_info(f"📥 ส่งข้อมูลนำเข้าล่วงหน้าให้โปรแกรม: {shown}", "echo")
             self.runner.send_input(data)
-            if self.console.preset_auto_eof.isChecked():
+            if auto_eof:
                 self.runner.close_input()
 
     def _on_run_finished(self, code: int, reason: str) -> None:
