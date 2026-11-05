@@ -1,13 +1,13 @@
-"""หน้าต่างหลักของ CppLearn: แท็บเอกสารหลายไฟล์ + Explorer + แผงผลลัพธ์/ปัญหา"""
+"""หน้าต่างหลักของ CPP-KUB: แท็บเอกสารหลายไฟล์ + Explorer + แผงผลลัพธ์/ปัญหา"""
 from __future__ import annotations
 
 import html
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, QSize, Qt
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSettings, QSize, Qt
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
-    QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QListWidgetItem, QMainWindow, QMessageBox,
+    QApplication, QFileDialog, QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QListWidgetItem, QMainWindow, QMessageBox,
     QSizePolicy, QSplitter, QToolBar, QVBoxLayout, QWidget,
 )
 
@@ -18,12 +18,13 @@ from .document import Document
 from .examples import DEFAULT_CODE, EXAMPLES
 from .sidebar import ActivityBar, Explorer
 from .tabs import DocumentTabs
+from .toast import Toast
 from .visualizer.loops import LoopTracker, find_loops
 from .visualizer.model import describe_signal
 from .visualizer.panel import VisualizerPanel
 from .visualizer.session import DebugSession
 
-APP_NAME = "Cpp-Kub"
+APP_NAME = "CPP-KUB"
 FILTER = "ไฟล์ C++ (*.cpp *.cc *.cxx *.h *.hpp);;ทุกไฟล์ (*)"
 
 
@@ -103,6 +104,7 @@ class MainWindow(QMainWindow):
         self.statusBar().addPermanentWidget(self.pos_label)
         self.statusBar().addPermanentWidget(self.enc_label)
 
+        self.toast = Toast(central)
         self._build_actions()
         self._build_menus()
         self._build_toolbar()
@@ -439,12 +441,14 @@ class MainWindow(QMainWindow):
         if ok:
             msg = "✔ คอมไพล์สำเร็จ" + (f" (มีคำเตือน {n_warn} รายการ)" if n_warn else "")
             self.console.append_info(msg, "ok")
+            self.toast.show_message(msg.lstrip("✔ "), "warn" if n_warn else "ok")
             if n_warn:
                 self.console.append_block(format_report(diags), "warn")
             self.console.append_info("🐞 เริ่มดีบัก" if self._debugging else "▶ เริ่มรันโปรแกรม", "info")
         else:
             self._set_busy(False)
             self._status(f"คอมไพล์ไม่ผ่าน ({n_err} ข้อผิดพลาด)", "error")
+            self.toast.show_message(f"คอมไพล์ไม่ผ่าน — พบข้อผิดพลาด {n_err} รายการ", "error", 4200)
             self.console.append_info(f"✖ คอมไพล์ไม่ผ่าน — พบข้อผิดพลาด {n_err} รายการ", "err")
             report = format_report(diags) or raw
             self.console.append_block(report, "err")
@@ -594,6 +598,8 @@ class MainWindow(QMainWindow):
             kind = "ok" if code == 0 else "warn"
             self.console.append_info(f"● โปรแกรมทำงานจบ (exit code {code})", kind)
             self._status("ทำงานเสร็จสิ้น", "ok")
+            if code == 0:
+                self.toast.show_message("โปรแกรมทำงานจบเรียบร้อย", "ok", 2200)
 
     def _goto_problem(self, item: QListWidgetItem) -> None:
         line = item.data(Qt.UserRole)
@@ -726,6 +732,7 @@ class MainWindow(QMainWindow):
         self._update_status_doc()
         self._sync_explorer()
         self._status(f"บันทึกแล้ว: {path}", "ok")
+        self.toast.show_message(f"บันทึก {path.name} แล้ว", "ok")
         return True
 
     def choose_folder(self) -> None:
@@ -757,6 +764,7 @@ class MainWindow(QMainWindow):
         if name:
             printing.export_pdf(name, self._doc_title(), self.editor.toPlainText())
             self._status(f"ส่งออกแล้ว: {name}", "ok")
+            self.toast.show_message("ส่งออก PDF แล้ว", "ok")
 
     # ---------- มุมมอง ----------
     def _zoom(self, delta: int) -> None:
@@ -769,7 +777,27 @@ class MainWindow(QMainWindow):
     def _toggle_dark(self) -> None:
         self.dark = self.a_dark.isChecked()
         self.settings.setValue("dark", self.dark)
+        central = self.centralWidget()
+        veil = QLabel(central)       # ภาพนิ่งของธีมเก่า แล้วเฟดหายเพื่อให้การสลับธีมนุ่มนวล
+        veil.setPixmap(central.grab())
+        veil.setGeometry(central.rect())
+        veil.show()
         self._apply_theme()
+        fx = QGraphicsOpacityEffect(veil)
+        veil.setGraphicsEffect(fx)
+        anim = QPropertyAnimation(fx, b"opacity", veil)
+        anim.setDuration(240)
+        anim.setStartValue(1.0)
+        anim.setEndValue(0.0)
+        anim.setEasingCurve(QEasingCurve.OutCubic)
+        anim.finished.connect(veil.deleteLater)
+        anim.start()
+        self._theme_anim = anim
+
+    def resizeEvent(self, e) -> None:
+        super().resizeEvent(e)
+        if self.toast.isVisible():
+            self.toast.reposition()
 
     def _apply_theme(self) -> None:
         QApplication.instance().setStyleSheet(theme.build_qss(self.dark))
@@ -799,7 +827,7 @@ class MainWindow(QMainWindow):
     def _about(self) -> None:
         QMessageBox.about(
             self, APP_NAME,
-            "<b>Cpp-Kub</b> — โปรแกรมเขียน C++ สำหรับการเรียนการสอน<br><br>"
+            "<b>CPP-KUB</b> — โปรแกรมเขียน C++ สำหรับการเรียนการสอน<br><br>"
             "• พิมพ์โค้ดและข้อมูลนำเข้าเป็นภาษาไทยได้ (UTF-8)<br>"
             "• อธิบายข้อผิดพลาดของคอมไพเลอร์เป็นภาษาไทย<br>"
             "• พิมพ์โค้ดและผลลัพธ์ หรือส่งออกเป็น PDF ได้ <br>"

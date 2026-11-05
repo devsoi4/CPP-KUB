@@ -27,7 +27,7 @@ COMPILE_TIMEOUT_MS = 60_000
 OUTPUT_LIMIT_CHARS = 200_000     # กันโปรแกรมที่พิมพ์ไม่หยุด
 
 PRELUDE_H = """\
-// สร้างโดย CppLearn: ทำให้ stdout/stderr ไม่ถูก buffer
+// สร้างโดย CPP-KUB: ทำให้ stdout/stderr ไม่ถูก buffer
 #include <cstdio>
 #include <iostream>
 namespace {
@@ -95,8 +95,8 @@ def work_dir() -> Path:
     """โฟลเดอร์ทำงานแบบ ASCII ที่เขียนได้ (ตัดปัญหาชื่อผู้ใช้/โฟลเดอร์ภาษาไทย)"""
     candidates = [app_dir() / "work"]
     if IS_WINDOWS:
-        candidates.append(Path(os.environ.get("PUBLIC", r"C:\Users\Public")) / "CppLearn")
-        candidates.append(Path(os.environ.get("SystemDrive", "C:") + "\\") / "CppLearn")
+        candidates.append(Path(os.environ.get("PUBLIC", r"C:\Users\Public")) / "CPP-KUB")
+        candidates.append(Path(os.environ.get("SystemDrive", "C:") + "\\") / "CPP-KUB")
     candidates.append(Path(tempfile.gettempdir()) / "cpp_learn")
     fallback: Path | None = None
     for d in candidates:

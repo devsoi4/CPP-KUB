@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
+from PySide6.QtGui import QColor, QFont, QPainter, QTextCharFormat, QTextCursor
 from PySide6.QtWidgets import (
     QHBoxLayout, QLabel, QLineEdit, QListWidget, QPlainTextEdit, QPushButton, QTabWidget,
     QVBoxLayout, QWidget,
@@ -18,6 +18,21 @@ def _colors(dark: bool) -> dict[str, str]:
                 ok=p["ok"], warn=p["warn"])
 
 
+class EmptyHintList(QListWidget):
+    """QListWidget ที่วาดข้อความกลางพื้นที่เมื่อไม่มีรายการ (empty state)"""
+
+    def __init__(self, hint: str, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.hint = hint
+
+    def paintEvent(self, e) -> None:
+        super().paintEvent(e)
+        if self.count() == 0:
+            p = QPainter(self.viewport())
+            p.setPen(QColor(theme.palette(self.property("dark") is True)["muted"]))
+            p.drawText(self.viewport().rect(), Qt.AlignCenter | Qt.TextWordWrap, self.hint)
+
+
 class ConsoleWidget(QWidget):
     input_submitted = Signal(str)
     eof_requested = Signal()
@@ -30,7 +45,7 @@ class ConsoleWidget(QWidget):
         self.output.setReadOnly(True)
         self.output.setFont(code_font(12))
         self.output.setMaximumBlockCount(20000)
-        self.output.setPlaceholderText("ผลลัพธ์ของโปรแกรมจะแสดงที่นี่  (กด F5 เพื่อรัน)")
+        self.output.setPlaceholderText("▶  กด F5 เพื่อรันโปรแกรม — ผลลัพธ์จะแสดงที่นี่\n🐞  กด F9 เพื่อดีบักและดูค่าตัวแปรทีละบรรทัด")
 
         self.input = QLineEdit()
         self.input.setFont(code_font(12))
@@ -73,7 +88,7 @@ class ConsoleWidget(QWidget):
         pl.addWidget(self.preset, 1)
         pl.addWidget(self.preset_auto_eof)
 
-        self.problems = QListWidget()
+        self.problems = EmptyHintList("✔  ไม่พบปัญหา\nข้อผิดพลาดและคำเตือนของคอมไพเลอร์จะแสดงที่นี่")
         self.problems.setWordWrap(True)
         self.problems.setResizeMode(QListWidget.Adjust)
         self.problems.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -93,6 +108,8 @@ class ConsoleWidget(QWidget):
     # ---------- สถานะ ----------
     def set_dark(self, dark: bool) -> None:
         self.dark = dark
+        self.problems.setProperty("dark", dark)
+        self.problems.viewport().update()
 
     def set_input_enabled(self, enabled: bool) -> None:
         for w in (self.input, self.send_btn, self.eof_btn):

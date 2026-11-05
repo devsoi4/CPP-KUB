@@ -15,7 +15,7 @@ DIAG_RE = re.compile(
 # {prev} = บรรทัดก่อนหน้า (g++ มักรายงาน ; ที่ลืมที่บรรทัดถัดไป)
 RULES: list[tuple[str, str]] = [
     (r"expected ',' or ';' before (.+)|expected '(;)' before (.+)",
-     "ลืมใส่เครื่องหมาย ; ท้ายคำสั่งหรือเปล่า? g++ มักชี้ที่บรรทัดถัดไป ให้ตรวจ {prev} ก่อน"),
+     "ลืมใส่เครื่องหมาย ; ท้ายคำสั่งหรือเปล่า? c++ มักชี้ที่บรรทัดถัดไป ให้ตรวจ {prev} ก่อน"),
     (r"'(cout|cin|endl|string|vector|map|set)' was not declared in this scope",
      "ไม่รู้จัก '{1}' — ลืมเขียน using namespace std; หรือลืม #include ที่เกี่ยวข้อง "
      "(เช่น #include <iostream> หรือ <string>)"),

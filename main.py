@@ -1,4 +1,4 @@
-"""CppLearn — โปรแกรมเขียน C++ สำหรับการสอน (รองรับภาษาไทย)
+"""CPP-KUB — โปรแกรมเขียน C++ สำหรับการสอน (รองรับภาษาไทย)
 
 รันด้วย:  python main.py
 """
@@ -16,7 +16,7 @@ UI_FONTS = ["Leelawadee UI", "Tahoma", "Noto Sans Thai", "Sarabun", "TH Sarabun 
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setApplicationName("CppLearn")
+    app.setApplicationName("CPP-KUB")
     app.setWindowIcon(QIcon(str(app_dir() / "assets" / "icon.png")))  # ไอคอนที่ title bar / taskbar
     available = set(QFontDatabase.families())
     for name in UI_FONTS:

@@ -1,5 +1,5 @@
 @echo off
-rem Build CppLearn for Windows (PyInstaller, onedir).
+rem Build CPP-KUB for Windows (PyInstaller, onedir).
 rem Put MinGW-w64 in .\compiler so that .\compiler\bin\g++.exe exists BEFORE running this.
 
 cd /d "%~dp0"
@@ -30,16 +30,16 @@ if not exist compiler\bin\gdb.exe (
 %PY% -m pip install -r requirements.txt
 if errorlevel 1 goto fail
 
-%PY% -m PyInstaller --noconfirm --clean --windowed --icon assets\icon.ico --name CppLearn main.py
+%PY% -m PyInstaller --noconfirm --clean --windowed --icon assets\icon.ico --name CPP-KUB main.py
 if errorlevel 1 goto fail
 
-xcopy /E /I /Y assets dist\CppLearn\assets >nul
+xcopy /E /I /Y assets dist\CPP-KUB\assets >nul
 if exist compiler (
-  xcopy /E /I /Y compiler dist\CppLearn\compiler >nul
+  xcopy /E /I /Y compiler dist\CPP-KUB\compiler >nul
 )
 
 echo.
-echo Done. Distribute the whole folder: dist\CppLearn
+echo Done. Distribute the whole folder: dist\CPP-KUB
 pause
 exit /b 0
 

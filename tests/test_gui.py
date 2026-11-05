@@ -27,7 +27,7 @@ def qapp(tmp_path_factory):
 
 @pytest.fixture
 def win(qapp):
-    QSettings("Cpp-Kub", "Cpp-Kub").clear()
+    QSettings("CPP-KUB", "CPP-KUB").clear()
     w = MainWindow()
     yield w
     for d in w.tabs.documents():
