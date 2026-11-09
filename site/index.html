@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CPP-KUB — โปรแกรมเขียน C++ สำหรับห้องเรียน</title>
+<meta name="description" content="โปรแกรมเดสก์ท็อปโอเพนซอร์สสำหรับสอน C++ ใช้ออฟไลน์ได้ พิมพ์ภาษาไทยได้ แปล error ของ g++ เป็นภาษาไทย และดีบักทีละบรรทัดให้เห็นตัวแปร call stack และ pointer">
+<meta name="theme-color" content="#0a0d1c">
+<meta property="og:title" content="CPP-KUB — โปรแกรมเขียน C++ สำหรับห้องเรียน">
+<meta property="og:description" content="เห็นโปรแกรมทำงานทีละบรรทัด อ่าน error เป็นภาษาไทย ใช้ออฟไลน์ ฟรี โอเพนซอร์ส">
+<meta property="og:url" content="https://cpp-kub.cerebrega.com">
+<meta property="og:type" content="website">
+<link rel="icon" href="icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0d1c; --bg2:#0e1226; --surface:#121730; --surface2:#171d3c; --line:#232a52;
+  --text:#e8ebff; --muted:#9099c8; --brand:#7b8cff; --brand-d:#3b46d6;
+  --int:#5aa9ff; --float:#4ade9a; --char:#ffa95a; --bool:#b184ff; --ptr:#ff7eb6; --heap:#ffd08a;
+  --flash:#ffe45e; --danger:#ff6b6b;
+  --sans:"IBM Plex Sans Thai","Leelawadee UI",Tahoma,system-ui,sans-serif;
+  --mono:"JetBrains Mono","Cascadia Mono",Consolas,"Leelawadee UI",monospace;
+  --maxw:1180px;
+}
+:root[data-theme="light"]{
+  --bg:#f4f5fc; --bg2:#eceefa; --surface:#ffffff; --surface2:#f0f2fc; --line:#d6daf0;
+  --text:#141836; --muted:#555e91; --brand:#3b46d6; --brand-d:#2b34b0;
+  --int:#1f6fd6; --float:#13875a; --char:#c46a12; --bool:#7a45d6; --ptr:#c93a82; --heap:#b8791a;
+  --flash:#ffe45e; --danger:#c93a3a;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --bg:#f4f5fc; --bg2:#eceefa; --surface:#ffffff; --surface2:#f0f2fc; --line:#d6daf0;
+    --text:#141836; --muted:#555e91; --brand:#3b46d6; --brand-d:#2b34b0;
+    --int:#1f6fd6; --float:#13875a; --char:#c46a12; --bool:#7a45d6; --ptr:#c93a82; --heap:#b8791a;
+    --danger:#c93a3a;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.7;font-size:17px;-webkit-font-smoothing:antialiased}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--brand);outline-offset:3px;border-radius:4px}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 20px}
+.mono{font-family:var(--mono)}
+h1,h2,h3{line-height:1.2;margin:0;font-weight:700;letter-spacing:-.01em}
+p{margin:0}
+
+/* nav */
+.nav{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.nav .wrap{display:flex;align-items:center;gap:20px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;font-weight:700;font-family:var(--mono);font-size:17px}
+.brand img{width:30px;height:30px;border-radius:8px}
+.nav nav{display:flex;gap:4px;margin-left:auto}
+.nav nav a{text-decoration:none;color:var(--muted);padding:6px 12px;border-radius:8px;font-size:15px}
+.nav nav a:hover{color:var(--text);background:var(--surface)}
+.theme{background:none;border:1px solid var(--line);color:var(--muted);width:36px;height:36px;border-radius:8px;cursor:pointer;font-size:16px}
+.theme:hover{color:var(--text)}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;gap:10px;padding:13px 22px;border-radius:10px;font:600 16px var(--sans);text-decoration:none;border:1px solid var(--line);background:var(--surface);color:var(--text);cursor:pointer}
+.btn:hover{border-color:var(--brand)}
+.btn.primary{background:linear-gradient(135deg,var(--brand),var(--brand-d));border-color:transparent;color:#fff;box-shadow:0 8px 28px -8px var(--brand-d)}
+.btn.primary:hover{filter:brightness(1.1)}
+.btn svg{width:18px;height:18px;flex:none}
+
+/* hero */
+.hero{position:relative;padding:64px 0 80px;overflow:hidden;
+  background-image:radial-gradient(color-mix(in srgb,var(--brand) 22%,transparent) 1px,transparent 1.2px);background-size:26px 26px;
+  -webkit-mask-image:none}
+.hero::after{content:"";position:absolute;inset:auto 0 0 0;height:140px;background:linear-gradient(transparent,var(--bg));pointer-events:none}
+.hero::before{content:"";position:absolute;left:-10%;top:-30%;width:60%;height:90%;background:radial-gradient(closest-side,color-mix(in srgb,var(--brand-d) 45%,transparent),transparent);filter:blur(20px);pointer-events:none}
+.hero .wrap{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);gap:48px;align-items:center}
+.pill{display:inline-flex;gap:8px;align-items:center;font:500 13px var(--mono);color:var(--muted);border:1px solid var(--line);background:var(--surface);padding:5px 12px;border-radius:99px;margin-bottom:22px}
+.pill i{width:8px;height:8px;border-radius:50%;background:var(--float);box-shadow:0 0 10px var(--float)}
+.hero h1{font-size:clamp(34px,5.2vw,58px);line-height:1.18;margin-bottom:20px}
+.hero .lead{color:var(--muted);font-size:19px;max-width:34em;margin-bottom:30px}
+.cta{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:26px}
+.facts{display:flex;flex-wrap:wrap;gap:8px 20px;color:var(--muted);font-size:14px;list-style:none;padding:0;margin:0}
+.facts li::before{content:"✓ ";color:var(--float)}
+
+/* debugger demo */
+.dbg{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;box-shadow:0 30px 80px -30px #000a,0 0 0 1px color-mix(in srgb,var(--brand) 10%,transparent)}
+.dbg-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--line);font:500 13px var(--mono);color:var(--muted)}
+.dbg-bar .dots{display:flex;gap:6px}.dbg-bar .dots i{width:10px;height:10px;border-radius:50%;background:var(--line)}
+.dbg-bar .tab{margin-left:8px;color:var(--text)}
+.dbg-body{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr)}
+.code{margin:0;padding:12px 0;font:14px/1.75 var(--mono);border-right:1px solid var(--line);overflow-x:auto}
+.code .ln{display:grid;grid-template-columns:34px 1fr;padding-right:10px;white-space:pre;border-left:3px solid transparent}
+.code .ln b{font-weight:400;color:var(--muted);text-align:right;padding-right:12px;opacity:.6}
+.code .ln.on{background:color-mix(in srgb,var(--flash) 16%,transparent);border-left-color:var(--flash)}
+.k{color:var(--bool)}.t{color:var(--int)}.n{color:var(--char)}.f{color:var(--float)}.s{color:var(--ptr)}
+.side{padding:12px 14px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.side h4{margin:0 0 6px;font:600 12px var(--sans);color:var(--muted)}
+.stack{display:flex;flex-direction:column-reverse;gap:4px}
+.frame{border-left:4px solid var(--c);background:color-mix(in srgb,var(--c) 12%,transparent);border-radius:6px;padding:5px 10px;font:13px var(--mono);display:flex;justify-content:space-between;gap:8px}
+.frame.cur{outline:1px solid var(--c)}
+.vars{width:100%;border-collapse:collapse;font:13px var(--mono)}
+.vars td{padding:4px 6px;border-bottom:1px solid var(--line)}
+.vars td:first-child{color:var(--muted);width:3.5em}
+.vars .ty{font-weight:700}
+.vars .val{text-align:right;font-weight:700}
+.vars .val.chg{background:var(--flash);color:#1a1a1a;border-radius:4px;box-shadow:0 0 14px var(--flash);animation:glow 1s ease-out}
+@keyframes glow{from{box-shadow:0 0 22px 4px var(--flash)}to{box-shadow:0 0 14px var(--flash)}}
+.note{font-size:14px;color:var(--text);background:var(--surface2);border:1px solid var(--line);border-radius:8px;padding:8px 12px;min-height:3.6em;line-height:1.5}
+.out{font:13px var(--mono);color:var(--float)}
+.dbg-ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);background:var(--surface2)}
+.dbg-ctl button{font:600 13px var(--sans);padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--text);cursor:pointer}
+.dbg-ctl button:hover{border-color:var(--brand)}
+.dbg-ctl kbd{font:12px var(--mono);color:var(--muted);margin-left:2px}
+.dbg-ctl .step{margin-left:auto;font:12px var(--mono);color:var(--muted)}
+
+/* sections */
+section{padding:84px 0}
+.head{max-width:44em;margin-bottom:44px}
+.head h2{font-size:clamp(28px,3.6vw,40px);margin-bottom:14px}
+.head p{color:var(--muted);font-size:18px}
+.alt{background:var(--bg2);border-block:1px solid var(--line)}
+
+/* bento */
+.bento{display:grid;grid-template-columns:repeat(6,1fr);gap:14px}
+.cell{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.cell h3{font-size:20px}
+.cell p{color:var(--muted);font-size:16px}
+.c-a{grid-column:span 4}.c-b{grid-column:span 2}.c-c{grid-column:span 2}.c-d{grid-column:span 2}.c-e{grid-column:span 2}.c-f{grid-column:span 3}.c-g{grid-column:span 3}
+.keys{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto;padding-top:8px}
+kbd.key{font:500 13px var(--mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:1px 8px;background:var(--surface2)}
+.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:auto;padding-top:8px}
+.chip{font:600 13px var(--mono);padding:3px 10px;border-radius:6px;border:1px solid var(--c);color:var(--c);background:color-mix(in srgb,var(--c) 12%,transparent)}
+.mem{display:flex;gap:4px;margin-top:auto;padding-top:8px;align-items:flex-end;flex-wrap:wrap}
+.mem span{width:44px;text-align:center;font:600 14px var(--mono);border:1px solid var(--int);background:color-mix(in srgb,var(--int) 14%,transparent);color:var(--int);border-radius:6px;padding:6px 0 2px;position:relative}
+.mem span small{display:block;font-size:10px;color:var(--muted);font-weight:400}
+.mem span.p{border-color:var(--ptr);color:var(--ptr);background:color-mix(in srgb,var(--ptr) 14%,transparent)}
+
+/* translate */
+.tr{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.pane{border:1px solid var(--line);border-radius:14px;background:var(--surface);overflow:hidden}
+.pane header{padding:9px 16px;font:500 13px var(--mono);color:var(--muted);background:var(--surface2);border-bottom:1px solid var(--line)}
+.pane pre{margin:0;padding:16px;font:14px/1.7 var(--mono);white-space:pre-wrap;word-break:break-word}
+.pane .th{font:16px/1.8 var(--sans);padding:16px}
+.pane .th strong{color:var(--flash)}
+.err{color:var(--danger)}
+.thai-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;margin-top:16px;padding:0;list-style:none}
+.thai-list li{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--surface);font-size:15px;color:var(--muted)}
+.thai-list b{display:block;color:var(--text);margin-bottom:2px}
+
+/* classroom */
+.rows{display:grid;grid-template-columns:repeat(3,1fr);gap:0;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface)}
+.rows div{padding:26px;border-right:1px solid var(--line)}
+.rows div:last-child{border-right:0}
+.rows h3{font-size:19px;margin-bottom:8px}
+.rows p{color:var(--muted);font-size:16px}
+
+/* download */
+.dl{display:grid;grid-template-columns:1.1fr 1fr;gap:16px}
+.card{border:1px solid var(--line);border-radius:16px;background:var(--surface);padding:30px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.card.main{border-color:color-mix(in srgb,var(--brand) 60%,var(--line));background:linear-gradient(160deg,color-mix(in srgb,var(--brand-d) 22%,var(--surface)),var(--surface) 60%)}
+.card h3{font-size:24px}
+.card p{color:var(--muted);font-size:16px}
+.card ul{margin:0;padding-left:1.2em;color:var(--muted);font-size:15px}
+.card .btn{align-self:flex-start;margin-top:auto}
+.term{position:relative;background:#070a16;border:1px solid var(--line);border-radius:10px;padding:14px 56px 14px 16px;font:13.5px/1.7 var(--mono);color:#cfd5ff;overflow-x:auto;white-space:pre}
+:root[data-theme="light"] .term{background:#141836;color:#dfe3ff}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .term{background:#141836;color:#dfe3ff}}
+.term .c{color:#7b83b8}
+.copy{position:absolute;right:8px;top:8px;font:600 12px var(--sans);padding:4px 10px;border-radius:6px;border:1px solid #2a3260;background:#161c3a;color:#cfd5ff;cursor:pointer}
+.copy:hover{border-color:var(--brand)}
+.build{margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.build .card{padding:26px}
+.build ol{margin:0;padding-left:1.3em;color:var(--muted);font-size:15.5px}
+.build ol li{margin-bottom:6px}
+.build code,.note-s code{font-family:var(--mono);font-size:.92em;background:var(--surface2);border:1px solid var(--line);padding:0 6px;border-radius:5px;color:var(--text)}
+.note-s{margin-top:18px;color:var(--muted);font-size:15px}
+
+/* footer */
+footer{border-top:1px solid var(--line);padding:40px 0;color:var(--muted);font-size:15px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:16px 40px;justify-content:space-between;align-items:center}
+footer a{text-decoration:none;border-bottom:1px solid var(--line)}
+footer a:hover{color:var(--text);border-color:var(--brand)}
+.flinks{display:flex;gap:20px;flex-wrap:wrap}
+
+/* responsive */
+@media (max-width:980px){
+  .hero .wrap{grid-template-columns:1fr}
+  .bento{grid-template-columns:repeat(2,1fr)}
+  .c-a,.c-f,.c-g{grid-column:span 2}.c-b,.c-c,.c-d,.c-e{grid-column:span 1}
+  .dl,.build,.tr{grid-template-columns:1fr}
+  .rows{grid-template-columns:1fr}.rows div{border-right:0;border-bottom:1px solid var(--line)}.rows div:last-child{border-bottom:0}
+}
+@media (max-width:640px){
+  body{font-size:16px}
+  .nav nav a:not(.keep){display:none}
+  .hero{padding:40px 0 56px}
+  section{padding:60px 0}
+  .dbg-body{grid-template-columns:1fr}
+  .code{border-right:0;border-bottom:1px solid var(--line)}
+  .bento{grid-template-columns:1fr}
+  .c-a,.c-b,.c-c,.c-d,.c-e,.c-f,.c-g{grid-column:span 1}
+  .btn{width:100%;justify-content:center}
+  .card{padding:22px}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .vars .val.chg{animation:none}
+}
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="logo.svg" alt="" width="30" height="30">CPP-KUB</a>
+    <nav aria-label="เมนูหลัก">
+      <a href="#features">ฟีเจอร์</a>
+      <a href="#thai">ภาษาไทย</a>
+      <a href="#classroom">ในห้องเรียน</a>
+      <a class="keep" href="#download">ดาวน์โหลด</a>
+    </nav>
+    <button class="theme" id="theme" aria-label="สลับธีมสว่าง/มืด" title="สลับธีม">◐</button>
+  </div>
+</header>
+
+<main id="top">
+<!-- HERO -->
+<div class="hero">
+  <div class="wrap">
+    <div>
+      <div class="pill"><i></i>โอเพนซอร์ส · ใช้ออฟไลน์ · ฟรี</div>
+      <h1>เขียน C++ แล้วเห็นโปรแกรมทำงานทีละบรรทัด</h1>
+      <p class="lead">CPP-KUB คือโปรแกรมเขียน C++ สำหรับห้องเรียน พิมพ์ภาษาไทยได้ อธิบาย error ของ g++ เป็นภาษาไทย และมีตัวช่วยมองเห็นตัวแปร call stack และ pointer ขณะโปรแกรมรัน</p>
+      <div class="cta">
+        <a class="btn primary" href="#download"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16"/></svg>ดาวน์โหลดสำหรับ Windows</a>
+        <a class="btn" href="https://github.com/devsoi4/CPP-KUB" rel="noopener"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5a11.5 11.5 0 00-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.19 1.76 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 015.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.42-2.69 5.39-5.25 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0012 .5z"/></svg>ดูซอร์สโค้ดบน GitHub</a>
+      </div>
+      <ul class="facts">
+        <li>ไม่ต้องติดตั้งเพิ่ม</li>
+        <li>ไม่ต้องใช้สิทธิ์ admin</li>
+        <li>ไม่ต้องต่ออินเทอร์เน็ต</li>
+      </ul>
+    </div>
+
+    <!-- live debugger -->
+    <div class="dbg" aria-label="ตัวอย่างการดีบักฟังก์ชัน recursion">
+      <div class="dbg-bar"><span class="dots"><i></i><i></i><i></i></span><span class="tab">factorial.cpp</span></div>
+      <div class="dbg-body">
+        <div class="code" id="code" role="img" aria-label="โค้ดตัวอย่าง factorial"></div>
+        <div class="side">
+          <div><h4>Call stack</h4><div class="stack" id="stack"></div></div>
+          <div><h4>ตัวแปรในเฟรมปัจจุบัน</h4><table class="vars" id="vars"></table></div>
+          <div class="note" id="note" aria-live="polite"></div>
+          <div class="out" id="out"></div>
+        </div>
+      </div>
+      <div class="dbg-ctl">
+        <button id="next">ข้ามบรรทัด <kbd>F10</kbd></button>
+        <button id="play" aria-pressed="false">เล่นอัตโนมัติ</button>
+        <button id="reset">เริ่มใหม่</button>
+        <span class="step" id="stepno"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="wrap">
+    <div class="head">
+      <h2>ออกแบบมาให้ครูใช้สอน และนักเรียนใช้เรียน</h2>
+      <p>ทุกอย่างที่เด็กมือใหม่ติด ตั้งแต่ error ที่อ่านไม่ออก จนถึง pointer ที่มองไม่เห็น ถูกแก้ในโปรแกรมเดียว</p>
+    </div>
+    <div class="bento">
+      <div class="cell c-a">
+        <h3>ตัวช่วยมองเห็นการทำงาน (Visualizer)</h3>
+        <p>กด F9 แล้วเดินโปรแกรมทีละบรรทัด ดูตารางตัวแปร call stack ป้ายรอบของ loop เช่น "วนรอบที่ 2 · i = 1" และภาพหน่วยความจำของ array กับ pointer ค่าที่เพิ่งเปลี่ยนจะเป็นพื้นเหลืองสดมีแสงเรือง</p>
+        <div class="keys"><kbd class="key">F9 เริ่ม</kbd><kbd class="key">F10 ข้ามบรรทัด</kbd><kbd class="key">F11 เข้าฟังก์ชัน</kbd><kbd class="key">Shift+F11 ออก</kbd><kbd class="key">F8 ทำต่อ</kbd></div>
+      </div>
+      <div class="cell c-b">
+        <h3>สีแยกตามชนิดข้อมูล</h3>
+        <p>กล่องและคอลัมน์ "ชนิด" ใช้สีเดียวกันทั้งแผง เห็นปุ๊บรู้ปั๊บว่าตัวแปรชนิดไหน</p>
+        <div class="legend">
+          <span class="chip" style="--c:var(--int)">int</span><span class="chip" style="--c:var(--float)">float</span><span class="chip" style="--c:var(--char)">char</span><span class="chip" style="--c:var(--bool)">bool</span><span class="chip" style="--c:var(--ptr)">pointer</span><span class="chip" style="--c:var(--heap)">heap</span>
+        </div>
+      </div>
+      <div class="cell c-c">
+        <h3>เห็น array และ pointer</h3>
+        <p>array เป็นช่องพร้อมเลข index ส่วน pointer เป็นลูกศรชี้ไปที่ตัวแปรหรือกล่อง heap</p>
+        <div class="mem" aria-hidden="true"><span>5<small>[0]</small></span><span>8<small>[1]</small></span><span>2<small>[2]</small></span><span class="p">→ [1]<small>p</small></span></div>
+      </div>
+      <div class="cell c-d">
+        <h3>แท็บหลายไฟล์แบบ VS Code</h3>
+        <p>ลากเรียงแท็บ คลิกกลางเพื่อปิด จุด ● บอกว่ายังไม่บันทึก และเปิดแท็บเดิมกลับมาให้เมื่อเปิดโปรแกรมครั้งหน้า</p>
+        <div class="keys"><kbd class="key">Ctrl+N</kbd><kbd class="key">Ctrl+W</kbd><kbd class="key">Ctrl+Tab</kbd></div>
+      </div>
+      <div class="cell c-e">
+        <h3>รันครั้งเดียว กดแล้วเห็นผล</h3>
+        <p>F5 คอมไพล์และรันทันที มีช่อง "ป้อนข้อมูล" สำหรับ <code class="mono">cin</code> และแท็บ "ข้อมูลนำเข้าล่วงหน้า" ให้ทดสอบซ้ำโดยไม่ต้องพิมพ์ใหม่</p>
+        <div class="keys"><kbd class="key">F5 รัน</kbd><kbd class="key">Shift+F5 หยุด</kbd></div>
+      </div>
+      <div class="cell c-f">
+        <h3>กันโปรแกรมวนไม่รู้จบ</h3>
+        <p>หยุดให้เองเมื่อไม่มีความเคลื่อนไหวเกิน 15 วินาที หรือพิมพ์ข้อความเกิน 200,000 ตัวอักษร เครื่องในห้องไม่ค้างเพราะ <code class="mono">while(true)</code> ของใครคนหนึ่ง</p>
+      </div>
+      <div class="cell c-g">
+        <h3>ตัวอย่างโค้ด 10 ตัวอย่าง</h3>
+        <p>รวมตัวอย่างที่มี error ไว้ให้ฝึกอ่านข้อผิดพลาด พร้อมสอนเรื่อง <code class="mono">string::size()</code> ของอักษรไทย 1 ตัว = 3 ไบต์</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- THAI -->
+<section id="thai" class="alt">
+  <div class="wrap">
+    <div class="head">
+      <h2>g++ พูดอังกฤษ CPP-KUB แปลให้เป็นไทย</h2>
+      <p>แปล error และ warning เป็นภาษาไทย ไฮไลต์บรรทัดที่ผิด และมีแผง "ปัญหาที่พบ" ที่คลิกแล้วกระโดดไปบรรทัดนั้น ส่วนข้อความที่ยังไม่มีกฎ จะแสดงคำอธิบายทั่วไปพร้อมข้อความเดิมของ g++</p>
+    </div>
+    <div class="tr">
+      <div class="pane">
+        <header>ก่อน · ผลจาก g++</header>
+<pre><span class="mono">main.cpp: In function 'int main()':
+main.cpp:6:25: <span class="err">error</span>: expected ';' before 'return'
+    5 |     cout &lt;&lt; "สวัสดี" &lt;&lt; endl
+      |                              ^
+      |                              ;
+    6 |     return 0;</span></pre>
+      </div>
+      <div class="pane">
+        <header>หลัง · CPP-KUB (ตัวอย่างข้อความ)</header>
+        <div class="th"><strong>บรรทัด 6: ลืมใส่ ; </strong><br>คอมไพเลอร์คาดว่าจะเจอเครื่องหมาย <span class="mono">;</span> ก่อนคำว่า <span class="mono">return</span> ให้ดู<strong>บรรทัดก่อนหน้า</strong> (บรรทัด 5) แล้วเติม <span class="mono">;</span> ท้ายคำสั่ง</div>
+      </div>
+    </div>
+    <ul class="thai-list">
+      <li><b>พิมพ์และแสดงผลภาษาไทยได้</b>ทุกอย่างเป็น UTF-8 รวมถึง <span class="mono">cout &lt;&lt; "สวัสดี"</span> และ <span class="mono">cin &gt;&gt; ชื่อ</span></li>
+      <li><b>แปลสาเหตุที่โปรแกรมพัง</b>segfault หารศูนย์ และ stack overflow อธิบายเป็นภาษาไทย</li>
+      <li><b>วางโค้ดจาก Word หรือเว็บ</b>แปลงเครื่องหมายคำพูดโค้ง “ ” เป็น " ให้เอง ต้นเหตุ error ที่เด็กเจอบ่อยที่สุด</li>
+      <li><b>เปิดไฟล์เก่า TIS-620</b>อ่านไฟล์ cp874 ได้ และบันทึกใหม่เป็น UTF-8 ให้อัตโนมัติ</li>
+      <li><b>ชื่อโฟลเดอร์ภาษาไทยก็ไม่พัง</b>ไฟล์คอมไพล์อยู่ในโฟลเดอร์ ASCII เสมอ</li>
+      <li><b>พิมพ์โค้ดและส่งออก PDF</b>ภาษาไทยแสดงถูกต้อง มีเลขบรรทัด</li>
+    </ul>
+  </div>
+</section>
+
+<!-- CLASSROOM -->
+<section id="classroom">
+  <div class="wrap">
+    <div class="head">
+      <h2>แจกทั้งห้องได้ในรอบเดียว</h2>
+      <p>แพ็กเป็นโฟลเดอร์เดียวพร้อม g++ ในตัว ไม่ต้องให้นักเรียนตั้งค่าอะไร</p>
+    </div>
+    <div class="rows">
+      <div><h3>แจกเป็นโฟลเดอร์</h3><p>ได้โฟลเดอร์ <span class="mono">CPP-KUB</span> แจกเป็น zip หรือ USB นักเรียนดับเบิลคลิก <span class="mono">CPP-KUB.exe</span> ได้เลย</p></div>
+      <div><h3>ใช้ออฟไลน์ทั้งหมด</h3><p>ห้องคอมที่ไม่มีเน็ตก็ใช้ได้ ไม่ต้องล็อกอิน ไม่ส่งข้อมูลออกไปไหน</p></div>
+      <div><h3>ธีมสว่างและมืด</h3><p>ชุดสีที่ออกแบบเป็นชุดเดียวกัน ขยายตัวอักษรได้ด้วย Ctrl + / Ctrl - ทั้งโค้ดและแผง Visualizer เหมาะกับฉายโปรเจกเตอร์</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- DOWNLOAD -->
+<section id="download" class="alt">
+  <div class="wrap">
+    <div class="head">
+      <h2>ดาวน์โหลด</h2>
+      <p>เป็นโอเพนซอร์ส เลือกได้ว่าจะโหลดโปรแกรมที่คอมไพล์แล้วไปใช้เลย หรือโหลดซอร์สโค้ดจาก git ไปคอมไพล์เอง</p>
+    </div>
+    <div class="dl">
+      <div class="card main">
+        <h3>โปรแกรมสำเร็จรูป สำหรับ Windows</h3>
+        <p>ดาวน์โหลดไฟล์ที่คอมไพล์แล้วจากหน้า Releases แตก zip แล้วดับเบิลคลิก <span class="mono">CPP-KUB.exe</span></p>
+        <ul>
+          <li>มี g++ ในตัว ไม่ต้องติดตั้งอะไรเพิ่ม</li>
+          <li>ไม่ต้องมีสิทธิ์ admin</li>
+          <li>ถ้า antivirus ของโรงเรียนแจ้งเตือนผิดพลาด ให้ขอ IT อนุญาตทั้งโฟลเดอร์ <span class="mono">CPP-KUB</span></li>
+        </ul>
+        <a class="btn primary" href="https://github.com/devsoi4/CPP-KUB/releases/latest" rel="noopener"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0l-5-5m5 5l5-5M4 21h16"/></svg>ดาวน์โหลดเวอร์ชันล่าสุด</a>
+      </div>
+      <div class="card">
+        <h3>ซอร์สโค้ดบน git</h3>
+        <p>โคลนจาก GitHub หรือโหลดเป็น zip</p>
+        <div class="term"><span class="c"># โคลนโปรเจกต์</span>
+git clone https://github.com/devsoi4/CPP-KUB.git
+cd CPP-KUB<button class="copy" data-copy="git clone https://github.com/devsoi4/CPP-KUB.git&#10;cd CPP-KUB">คัดลอก</button></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:auto">
+          <a class="btn" href="https://github.com/devsoi4/CPP-KUB/archive/refs/heads/main.zip" rel="noopener">ดาวน์โหลด .zip</a>
+          <a class="btn" href="https://github.com/devsoi4/CPP-KUB" rel="noopener">เปิดบน GitHub</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="build">
+      <div class="card">
+        <h3>รันจากซอร์สระหว่างพัฒนา</h3>
+        <div class="term">pip install -r requirements.txt
+python main.py<button class="copy" data-copy="pip install -r requirements.txt&#10;python main.py">คัดลอก</button></div>
+        <p>ต้องมี <span class="mono">g++</span> ใน PATH หรือวางไว้ที่ <span class="mono">compiler\bin\g++.exe</span> และถ้าจะใช้ Visualizer ต้องมี <span class="mono">gdb.exe</span> ในโฟลเดอร์เดียวกัน</p>
+      </div>
+      <div class="card">
+        <h3>คอมไพล์เป็นโปรแกรมแจกจ่ายบน Windows</h3>
+        <ol>
+          <li>ดาวน์โหลด MinGW-w64 แบบ zip (เช่นจาก WinLibs หรือ MSYS2) แตกไว้ในโฟลเดอร์ <code>compiler</code> ให้ได้ <code>compiler\bin\g++.exe</code></li>
+          <li>ติดตั้ง Python 3.10 ขึ้นไปบนเครื่องที่ใช้สร้าง</li>
+          <li>ดับเบิลคลิก <code>build_windows.bat</code></li>
+          <li>ได้โฟลเดอร์ <code>dist\CPP-KUB\</code> พร้อมแจก</li>
+        </ol>
+      </div>
+    </div>
+    <p class="note-s">ทดสอบบน Linux และ Windows แล้ว แนะนำให้ลองบนเครื่องนักเรียน 1 เครื่องก่อนแจกทั้งห้อง ยังไม่มีระบบโจทย์ตรวจอัตโนมัติ และ Visualizer ยังพิมพ์ <code>cin</code> สดระหว่างดีบักไม่ได้ ให้ใช้แท็บ "ข้อมูลนำเข้าล่วงหน้า" แทน</p>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div>
+      <strong>CPP-KUB</strong> เป็นหนึ่งในผลิตภัณฑ์ของ <a href="https://cerebrega.com" rel="noopener">cerebrega.com</a><br>
+      โอเพนซอร์ส สร้างด้วย Python และ PySide6
+    </div>
+    <div class="flinks">
+      <a href="https://github.com/devsoi4/CPP-KUB" rel="noopener">ซอร์สโค้ด</a>
+      <a href="https://github.com/devsoi4/CPP-KUB/releases" rel="noopener">Releases</a>
+      <a href="https://github.com/devsoi4/CPP-KUB/issues" rel="noopener">แจ้งปัญหา</a>
+      <a href="https://cerebrega.com" rel="noopener">Cerebrega</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  /* theme */
+  var root=document.documentElement,btn=document.getElementById('theme');
+  try{var s=localStorage.getItem('theme');if(s)root.setAttribute('data-theme',s)}catch(e){}
+  btn.addEventListener('click',function(){
+    var cur=root.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
+    var nx=cur==='dark'?'light':'dark';root.setAttribute('data-theme',nx);
+    try{localStorage.setItem('theme',nx)}catch(e){}
+  });
+
+  /* copy */
+  document.querySelectorAll('.copy').forEach(function(b){
+    b.addEventListener('click',function(){
+      var t=b.getAttribute('data-copy');
+      (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){b.textContent='คัดลอกแล้ว'},function(){b.textContent='กด Ctrl+C'});
+      setTimeout(function(){b.textContent='คัดลอก'},1600);
+    });
+  });
+
+  /* debugger demo: factorial(3) */
+  var LINES=[
+    '<span class="t">int</span> <span class="f">fact</span>(<span class="t">int</span> n) {',
+    '    <span class="k">if</span> (n &lt;= <span class="n">1</span>) <span class="k">return</span> <span class="n">1</span>;',
+    '    <span class="k">return</span> n * <span class="f">fact</span>(n - <span class="n">1</span>);',
+    '}',
+    '<span class="t">int</span> <span class="f">main</span>() {',
+    '    <span class="t">int</span> r = <span class="f">fact</span>(<span class="n">3</span>);',
+    '    cout &lt;&lt; r;',
+    '}'
+  ];
+  var CF={main:'var(--brand)',f3:'var(--float)',f2:'var(--char)',f1:'var(--ptr)'};
+  function F(id,name,v,chg){return {id:id,name:name,vars:v,chg:chg}}
+  var main0=F('main','main()',[['int','r','?']]);
+  var STEPS=[
+    {l:5,st:[main0],n:'เริ่มที่ main() ตัวแปร r ยังไม่มีค่า',o:''},
+    {l:6,st:[main0],n:'เรียก fact(3) โปรแกรมจะกระโดดเข้าไปในฟังก์ชัน',o:''},
+    {l:2,st:[main0,F('f3','fact(3)',[['int','n','3']],'n')],n:'เข้า fact เป็นเฟรมใหม่บน stack ได้ n = 3 เงื่อนไข n <= 1 เป็นเท็จ',o:''},
+    {l:3,st:[main0,F('f3','fact(3)',[['int','n','3']])],n:'ต้องรู้ fact(2) ก่อนถึงจะคูณ 3 ได้ จึงเรียกตัวเองอีกครั้ง',o:''},
+    {l:2,st:[main0,F('f3','fact(3)',[['int','n','3']]),F('f2','fact(2)',[['int','n','2']],'n')],n:'เฟรมใหม่ของ fact(2) ซ้อนทับขึ้นมา n ของแต่ละเฟรมเป็นคนละตัวกัน',o:''},
+    {l:3,st:[main0,F('f3','fact(3)',[['int','n','3']]),F('f2','fact(2)',[['int','n','2']])],n:'ยังไม่ถึงฐาน เรียก fact(1) ต่อ',o:''},
+    {l:2,st:[main0,F('f3','fact(3)',[['int','n','3']]),F('f2','fact(2)',[['int','n','2']]),F('f1','fact(1)',[['int','n','1']],'n')],n:'n = 1 เงื่อนไข n <= 1 เป็นจริง ถึงกรณีฐานแล้ว จะคืนค่า 1',o:''},
+    {l:3,st:[main0,F('f3','fact(3)',[['int','n','3']]),F('f2','fact(2)',[['int','n','2']])],n:'fact(1) จบและถูกดึงออกจาก stack ได้ 1 กลับมาที่ fact(2): 2 × 1 = 2',o:''},
+    {l:3,st:[main0,F('f3','fact(3)',[['int','n','3']])],n:'fact(2) จบ คืน 2 กลับมาที่ fact(3): 3 × 2 = 6',o:''},
+    {l:6,st:[F('main','main()',[['int','r','6']],'r')],n:'กลับถึง main แล้ว r ได้ค่า 6 ค่าที่เพิ่งเปลี่ยนจะเรืองสีเหลือง',o:''},
+    {l:7,st:[F('main','main()',[['int','r','6']])],n:'พิมพ์ค่า r ออกหน้าจอ',o:'ผลลัพธ์: 6'},
+    {l:8,st:[F('main','main()',[['int','r','6']])],n:'จบโปรแกรม',o:'ผลลัพธ์: 6'}
+  ];
+  var TC={int:'var(--int)',float:'var(--float)',char:'var(--char)',bool:'var(--bool)'};
+  var i=0,timer=null;
+  var codeEl=document.getElementById('code'),stackEl=document.getElementById('stack'),varsEl=document.getElementById('vars'),
+      noteEl=document.getElementById('note'),outEl=document.getElementById('out'),noEl=document.getElementById('stepno'),
+      playBtn=document.getElementById('play');
+  codeEl.innerHTML=LINES.map(function(h,k){return '<div class="ln" data-l="'+(k+1)+'"><b>'+(k+1)+'</b><span>'+h+'</span></div>'}).join('');
+  function render(){
+    var s=STEPS[i];
+    [].forEach.call(codeEl.children,function(e){e.classList.toggle('on',+e.dataset.l===s.l)});
+    stackEl.innerHTML=s.st.map(function(f,k){
+      return '<div class="frame'+(k===s.st.length-1?' cur':'')+'" style="--c:'+(CF[f.id]||CF.main)+'"><span>'+f.name+'</span>'+(k===s.st.length-1?'<span>◀ อยู่ที่นี่</span>':'')+'</div>';
+    }).join('');
+    var cur=s.st[s.st.length-1];
+    varsEl.innerHTML=cur.vars.map(function(v){
+      return '<tr><td class="ty" style="color:'+TC[v[0]]+'">'+v[0]+'</td><td>'+v[1]+'</td><td class="val'+(cur.chg===v[1]?' chg':'')+'">'+v[2]+'</td></tr>';
+    }).join('');
+    noteEl.textContent=s.n;outEl.textContent=s.o;
+    noEl.textContent='ขั้นที่ '+(i+1)+'/'+STEPS.length;
+  }
+  function next(){i=(i+1)%STEPS.length;render()}
+  function stop(){clearInterval(timer);timer=null;playBtn.textContent='เล่นอัตโนมัติ';playBtn.setAttribute('aria-pressed','false')}
+  function play(){playBtn.textContent='หยุดเล่น';playBtn.setAttribute('aria-pressed','true');timer=setInterval(next,2200)}
+  document.getElementById('next').addEventListener('click',function(){stop();next()});
+  document.getElementById('reset').addEventListener('click',function(){stop();i=0;render()});
+  playBtn.addEventListener('click',function(){timer?stop():play()});
+  document.addEventListener('keydown',function(e){
+    if(e.key==='F10'&&!e.ctrlKey&&!e.altKey&&!e.metaKey){e.preventDefault();stop();next()}
+  });
+  render();
+  if(!matchMedia('(prefers-reduced-motion: reduce)').matches){setTimeout(function(){if(!timer&&i===0)play()},1200)}
+})();
+</script>
+</body>
+</html>
