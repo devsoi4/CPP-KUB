@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF
-from PySide6.QtWidgets import QGraphicsScene, QGraphicsView
+from PySide6.QtWidgets import QGraphicsDropShadowEffect, QGraphicsScene, QGraphicsView
 
 from .. import theme
 from ..editor import code_font
@@ -51,6 +51,12 @@ class MemoryView(QGraphicsView):
         self._scene.clear()
         self._reset_counts()
 
+    def set_scale(self, factor: float) -> None:
+        """ขยาย/ย่อภาพทั้งหมด (ใช้กับโหมดสอนหน้าห้อง) — ไม่เปลี่ยนจำนวนกล่อง"""
+        factor = max(0.6, min(3.0, factor))
+        self.resetTransform()
+        self.scale(factor, factor)
+
     def set_dark(self, dark: bool) -> None:
         self._dark = dark
         if self._snap is not None:
@@ -64,24 +70,46 @@ class MemoryView(QGraphicsView):
             return
         self._pal = theme.palette(self._dark)
         self.setBackgroundBrush(QBrush(QColor(self._pal["bg"])))
-        y = MARGIN
+        y = MARGIN + self._draw_legend(MARGIN, MARGIN) + GAP
         max_x = MARGIN
         pending: list[tuple[Var, QRectF, int]] = []          # (pointer, กล่องของมัน, ลำดับลูกศร)
-        for fr in snap.frames:
-            title = self._scene.addSimpleText(f"{fr.func}()", self._font)
-            title.setBrush(QBrush(QColor(self._pal["accent"])))
+        n = len(snap.frames)
+        for i, fr in enumerate(snap.frames):
+            color = QColor(theme.frame_color(self._dark, n - 1 - i))   # main = สีแรกเสมอ
+            top_y = y
+            bold = QFont(self._font)
+            bold.setBold(True)
+            title = self._scene.addSimpleText(f"{fr.func}()", bold)
+            title.setBrush(QBrush(color))
             title.setPos(MARGIN, y)
             y += CAPTION_H + 4
             for var in fr.args + fr.locals:
                 w, h = self._draw(var, MARGIN, y, fr.level, pending, top=True)
                 max_x = max(max_x, MARGIN + w)
                 y += h + GAP
+            bar = self._scene.addRect(QRectF(MARGIN - 9, top_y, 4, max(y - top_y - GAP, CAPTION_H)),
+                                      QPen(Qt.NoPen), QBrush(color))   # แถบสีประจำเฟรม
+            bar.setZValue(-1)
             y += GAP
         self._draw_arrows(pending, max_x, y)
         rect = self._scene.itemsBoundingRect().adjusted(-MARGIN, -MARGIN, MARGIN, MARGIN)
         self._scene.setSceneRect(rect)
 
     # ---------- ภายใน ----------
+    def _draw_legend(self, x: float, y: float) -> float:
+        """แถบคำอธิบายสี (ชิปสี + ชื่อชนิด) คืนความสูงที่ใช้ — ป้ายข้อความช่วยคนที่แยกสีไม่ออก"""
+        f = QFont(self._font)
+        f.setPointSize(max(7, f.pointSize() - 2))
+        cx = x
+        for cat, label in theme.TYPE_LABELS.items():
+            fill, edge = theme.type_colors(self._dark, cat)
+            self._scene.addRect(QRectF(cx, y + 2, 12, 12), QPen(QColor(edge), 1.4), QBrush(QColor(fill)))
+            t = self._scene.addSimpleText(label, f)
+            t.setBrush(QBrush(QColor(self._pal["muted"])))
+            t.setPos(cx + 16, y)
+            cx += 16 + t.boundingRect().width() + 12
+        return CAPTION_H
+
     def _reset_counts(self) -> None:
         self._boxes = 0
         self._arrows = 0
@@ -91,11 +119,28 @@ class MemoryView(QGraphicsView):
         return QPen(QColor(self._pal[key]), width)
 
     def _box(self, x: float, y: float, text: str, *, changed: bool = False, danger: bool = False,
-             w: float = BOX_W) -> QRectF:
+             w: float = BOX_W, category: str = "other") -> QRectF:
         rect = QRectF(x, y, w, BOX_H)
-        fill = self._pal["changed"] if changed else self._pal["panel"]
-        self._scene.addRect(rect, self._pen("danger" if danger else "border"), QBrush(QColor(fill)))
+        colors = theme.type_colors(self._dark, category)
+        fill, edge = colors if colors else (self._pal["panel"], self._pal["border"])
+        width = 1.4
+        if changed:                                       # ค่าที่เพิ่งเปลี่ยน: พื้นเหลืองสด + ขอบหนา + เรือง
+            fill, edge = theme.changed_colors(self._dark)
+            width = 2.6
+        if danger:
+            edge, width = self._pal["danger"], 2.0
+        item = self._scene.addRect(rect, QPen(QColor(edge), width), QBrush(QColor(fill)))
+        if changed:
+            glow = QGraphicsDropShadowEffect()
+            glow.setBlurRadius(14)
+            glow.setOffset(0, 0)
+            glow.setColor(QColor(edge))
+            item.setGraphicsEffect(glow)
         label = self._scene.addSimpleText(_short(text), self._font)
+        if changed:
+            bold = QFont(self._font)
+            bold.setBold(True)
+            label.setFont(bold)
         label.setBrush(QBrush(QColor(self._pal["danger" if danger else "text"])))
         br = label.boundingRect()
         label.setPos(x + (w - br.width()) / 2, y + (BOX_H - br.height()) / 2)
@@ -133,7 +178,8 @@ class MemoryView(QGraphicsView):
             if top:
                 self._rects[(level, var.name, None)] = rect
             return rect.width(), CAPTION_H + row_h + 6
-        rect = self._box(x, y0, self._cell_text(var), changed=var.changed, danger=var.unreadable)
+        rect = self._box(x, y0, self._cell_text(var), changed=var.changed, danger=var.unreadable,
+                         category=theme.type_category(var.type, var.value, var.kind))
         if top:
             self._rects[(level, var.name, None)] = rect
         if var.kind == "pointer":
@@ -162,7 +208,8 @@ class MemoryView(QGraphicsView):
             return width, CAPTION_H + cy - y0
         cx = x
         for i, c in enumerate(var.children):
-            rect = self._box(cx, y0, self._cell_text(c), changed=c.changed, danger=c.unreadable)
+            rect = self._box(cx, y0, self._cell_text(c), changed=c.changed, danger=c.unreadable,
+                             category=theme.type_category(c.type, c.value, c.kind))
             self._caption(cx + 2, y0 + BOX_H, f"[{i}]")
             if top:
                 self._rects[(level, var.name, i)] = rect
@@ -170,7 +217,7 @@ class MemoryView(QGraphicsView):
                 pending.append((c, rect, level))
             cx += BOX_W + 2
         if var.more:
-            self._box(cx, y0, f"… +{var.more}", w=BOX_W)
+            self._box(cx, y0, f"… +{var.more}", w=BOX_W, category="array")
             cx += BOX_W + 2
         if top:
             self._rects[(level, var.name, None)] = QRectF(x, y0, max(cx - x, BOX_W), BOX_H)
@@ -188,16 +235,17 @@ class MemoryView(QGraphicsView):
                 p = var.points_to
                 target = self._rects.get((p.frame_level, p.var_name, p.index)) \
                     or self._rects.get((p.frame_level, p.var_name, None))
-            if target is None:                                   # ชี้ออกนอก → กล่อง heap
+            to_heap = target is None
+            if to_heap:                                          # ชี้ออกนอก → กล่อง heap
                 text = var.pointee if var.pointee is not None else "?"
                 self._caption(heap_x, heap_y, f"heap {hex(var.target)}")
                 target = self._box(heap_x, heap_y + CAPTION_H, text,
-                                   danger=(var.pointee == UNREADABLE_POINTEE))
+                                   danger=(var.pointee == UNREADABLE_POINTEE), category="heap")
                 heap_y += CAPTION_H + BOX_H + GAP
-            self._arrow(src, target, lane)
+            self._arrow(src, target, lane, theme.arrow_color(self._dark, to_heap))
             lane += 1
 
-    def _arrow(self, src: QRectF, dst: QRectF, lane: int) -> None:
+    def _arrow(self, src: QRectF, dst: QRectF, lane: int, color: str) -> None:
         start = QPointF(src.right(), src.center().y())
         end = QPointF(dst.right() if dst.left() < src.left() else dst.left(), dst.center().y())
         reach = 24.0 + 10.0 * (lane % 6)
@@ -205,10 +253,10 @@ class MemoryView(QGraphicsView):
         c2 = QPointF(end.x() + (reach if end.x() >= dst.right() - 0.1 else -reach), end.y())
         path = QPainterPath(start)
         path.cubicTo(c1, c2, end)
-        item = self._scene.addPath(path, self._pen("accent", 1.6))
+        item = self._scene.addPath(path, QPen(QColor(color), 2.2))
         item.setZValue(2)
         direction = -1.0 if c2.x() > end.x() else 1.0            # ปลายลูกศรหันเข้าหากล่องเป้าหมาย
         head = QPolygonF([end, QPointF(end.x() + 8 * -direction, end.y() - 4),
                           QPointF(end.x() + 8 * -direction, end.y() + 4)])
-        self._scene.addPolygon(head, self._pen("accent", 1.0), QBrush(QColor(self._pal["accent"]))).setZValue(2)
+        self._scene.addPolygon(head, QPen(QColor(color), 1.0), QBrush(QColor(color))).setZValue(2)
         self._arrows += 1

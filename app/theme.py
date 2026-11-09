@@ -4,6 +4,8 @@
 """
 from __future__ import annotations
 
+import re
+
 _LIGHT = dict(
     bg="#ffffff", panel="#eef0f6", sidebar="#fafbfd", border="#e3e6ee",
     text="#1a1d29", muted="#6a7083", accent="#5468ff", accent_text="#ffffff",
@@ -28,6 +30,81 @@ _DARK = dict(
 
 def palette(dark: bool) -> dict[str, str]:
     return dict(_DARK if dark else _LIGHT)
+
+
+# ---------- สีของภาพ Visualizer (โหมดสอน): สีตามชนิดข้อมูล / ตาม stack frame / ตามเป้าหมายของ pointer ----------
+# หมวดชนิด → (สีพื้นกล่อง, สีขอบ)
+TYPE_LABELS = {"int": "int", "float": "float", "char": "char", "bool": "bool", "pointer": "pointer", "heap": "heap"}
+_TYPES_LIGHT = {
+    "int": ("#dbeafe", "#2563eb"), "float": ("#d1fae5", "#059669"), "char": ("#ffedd5", "#ea580c"),
+    "bool": ("#ede9fe", "#7c3aed"), "pointer": ("#fce7f3", "#db2777"), "heap": ("#fff1e0", "#c2410c"),
+    "array": ("#fef9c3", "#ca8a04"),
+}
+_TYPES_DARK = {
+    "int": ("#1e3a5f", "#60a5fa"), "float": ("#0f3d33", "#34d399"), "char": ("#4a2a10", "#fb923c"),
+    "bool": ("#35255e", "#a78bfa"), "pointer": ("#4a1d3a", "#f472b6"), "heap": ("#4a2410", "#fb923c"),
+    "array": ("#453a0e", "#facc15"),
+}
+# สีประจำ stack frame (วนตามความลึก นับจาก main = 0)
+_FRAMES_LIGHT = ["#4f46e5", "#0d9488", "#c026d3", "#ea580c", "#0284c7", "#65a30d"]
+_FRAMES_DARK = ["#818cf8", "#2dd4bf", "#e879f9", "#fb923c", "#38bdf8", "#a3e635"]
+# ลูกศร pointer: ชี้ตัวแปรใน stack / ชี้ heap
+_ARROWS_LIGHT = {"stack": "#2563eb", "heap": "#ea580c"}
+_ARROWS_DARK = {"stack": "#60a5fa", "heap": "#fb923c"}
+# ค่าที่เพิ่งเปลี่ยน: (พื้น, ขอบ/เรือง)
+_CHANGED_LIGHT = ("#fde047", "#d97706")
+_CHANGED_DARK = ("#854d0e", "#fde047")
+
+_RE_CHAR_VAL = re.compile(r"^-?\d+ '")
+_RE_INT_VAL = re.compile(r"^-?\d+$")
+_RE_FLOAT_VAL = re.compile(r"^-?(\d+\.\d*|\.\d+|\d+(\.\d*)?[eE][-+]?\d+|inf|nan\(.*\)|-?nan.*)$")
+_INT_WORDS = ("long", "short", "unsigned", "signed", "size_t", "ptrdiff_t")
+
+
+def type_category(type_str: str, value: str = "", kind: str = "scalar") -> str:
+    """จัดชนิดข้อมูลเป็นหมวดสี: int|float|char|bool|pointer|other (สมาชิก struct ไม่มีชนิด → เดาจากรูปค่า)"""
+    if kind == "pointer":
+        return "pointer"
+    t = type_str.replace("const", "").replace("volatile", "").strip().lower()
+    if t:
+        if t == "bool":
+            return "bool"
+        words = re.findall(r"[a-z_][a-z_0-9]*", t)          # เทียบทีละคำ กัน "Point" ไปติดคำว่า int
+        if any(w in ("string", "char", "wchar_t") or w.startswith("char") for w in words):
+            return "char"
+        if any(w in ("float", "double") for w in words):
+            return "float"
+        if any(w in _INT_WORDS or re.fullmatch(r"u?int\d*(_t)?", w) for w in words):
+            return "int"
+        return "other"
+    v = value.strip()
+    if v in ("true", "false"):
+        return "bool"
+    if v.startswith(("'", '"')) or _RE_CHAR_VAL.match(v):
+        return "char"
+    if _RE_INT_VAL.match(v):
+        return "int"
+    if _RE_FLOAT_VAL.match(v):
+        return "float"
+    return "other"
+
+
+def type_colors(dark: bool, category: str) -> tuple[str, str] | None:
+    """(สีพื้น, สีขอบ) ของหมวดชนิด; None = ไม่มีสีเฉพาะ (ให้ใช้สี panel/border ปกติ)"""
+    return (_TYPES_DARK if dark else _TYPES_LIGHT).get(category)
+
+
+def frame_color(dark: bool, depth: int) -> str:
+    colors = _FRAMES_DARK if dark else _FRAMES_LIGHT
+    return colors[depth % len(colors)]
+
+
+def arrow_color(dark: bool, heap: bool) -> str:
+    return (_ARROWS_DARK if dark else _ARROWS_LIGHT)["heap" if heap else "stack"]
+
+
+def changed_colors(dark: bool) -> tuple[str, str]:
+    return _CHANGED_DARK if dark else _CHANGED_LIGHT
 
 
 def build_qss(dark: bool) -> str:

@@ -56,3 +56,25 @@ def test_close_button_icons_are_in_stylesheet_and_exist(qapp, dark):
     assert len(urls) == 2                         # ปกติ + ตอนเอาเมาส์ชี้
     for u in urls:
         assert Path(u).is_file() and Path(u).stat().st_size > 0
+
+
+def test_type_category_from_type_and_value():
+    cat = theme.type_category
+    assert cat("int", "5") == "int" and cat("unsigned long", "5") == "int"
+    assert cat("double", "1.5") == "float" and cat("char", "97 'a'") == "char"
+    assert cat("bool", "true") == "bool" and cat("std::string", '"x"') == "char"
+    assert cat("int *", "0x1", "pointer") == "pointer"
+    assert cat("Point", "{...}") == "other"
+    # สมาชิก struct ไม่มีชนิด → เดาจากค่า
+    assert cat("", "42") == "int" and cat("", "3.14") == "float"
+    assert cat("", "97 'a'") == "char" and cat("", "true") == "bool"
+
+
+def test_teaching_colors_exist_for_both_themes():
+    for dark in (False, True):
+        for c in ("int", "float", "char", "bool", "pointer", "heap", "array"):
+            fill, edge = theme.type_colors(dark, c)
+            assert fill.startswith("#") and edge.startswith("#") and fill != edge
+        assert theme.type_colors(dark, "other") is None
+        assert theme.frame_color(dark, 0) != theme.frame_color(dark, 1)
+        assert theme.arrow_color(dark, True) != theme.arrow_color(dark, False)

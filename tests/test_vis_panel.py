@@ -190,3 +190,18 @@ def test_panel_explains_sigfpe_and_sigabrt_in_thai(panel):
         s.signal = sig
         panel.show_snapshot(s)
         assert sig in panel.info_label.text() and "—" in panel.info_label.text()
+
+
+def test_type_column_is_colored_by_category(panel):
+    from app import theme
+    panel.show_snapshot(make_snapshot())
+    sum_item = next(i for i in top(panel) if i.text(0) == "sum")
+    assert sum_item.foreground(1).color().name() == theme.type_colors(False, "int")[1]
+
+
+def test_set_zoom_scales_memory_view_and_tables(panel):
+    panel.set_zoom(26)
+    assert panel.memory.transform().m11() == pytest.approx(2.0)
+    assert panel.variables.font().pointSize() >= 22
+    panel.set_zoom(13)
+    assert panel.memory.transform().m11() == pytest.approx(1.0)

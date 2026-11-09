@@ -111,6 +111,7 @@ class MainWindow(QMainWindow):
         self._connect_signals()
 
         self.console.set_font_size(max(10, self._font_size - 1))
+        self.visualizer.set_zoom(self._font_size)
         self._apply_theme()
         self.resize(1280, 780)
         if not self._restore_session():
@@ -772,6 +773,7 @@ class MainWindow(QMainWindow):
         for d in self.tabs.documents():
             d.editor.set_font_size(self._font_size)
         self.console.set_font_size(max(10, self._font_size - 1))
+        self.visualizer.set_zoom(self._font_size)
         self.settings.setValue("font_size", self._font_size)
 
     def _toggle_dark(self) -> None:

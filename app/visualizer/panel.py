@@ -97,6 +97,14 @@ class VisualizerPanel(QWidget):
         self.info_label.setText("")
         self.set_loops([], {})
 
+    def set_zoom(self, font_size: int) -> None:
+        """ขยายภาพหน่วยความจำ/ตารางตัวแปร/call stack ตามขนาดตัวอักษรของตัวแก้ไข (ฐาน 13pt = ปกติ)"""
+        self.memory.set_scale(font_size / 13)
+        for w in (self.variables, self.stack):
+            f = w.font()
+            f.setPointSize(max(8, round(font_size * 0.85)))
+            w.setFont(f)
+
     def set_dark(self, dark: bool) -> None:
         self._dark = dark
         self.memory.set_dark(dark)
@@ -127,10 +135,18 @@ class VisualizerPanel(QWidget):
         if var.kind in ("array", "struct") and var.children:
             shown = ""                     # ค่าของลูกแสดงในแถวลูกอยู่แล้ว
         item = QTreeWidgetItem(parent, [var.name, var.type, shown])
+        colors = theme.type_colors(self._dark, theme.type_category(var.type, var.value, var.kind))
+        if colors:                                         # ชื่อชนิดใช้สีเดียวกับกล่องในภาพ
+            item.setForeground(1, QBrush(QColor(colors[1])))
+            bold = item.font(1)
+            bold.setBold(True)
+            item.setFont(1, bold)
         if var.changed:
-            brush = QBrush(QColor(theme.palette(self._dark)["changed"]))
+            brush = QBrush(QColor(theme.changed_colors(self._dark)[0]))
             for col in range(3):
                 item.setBackground(col, brush)
+                if self._dark:
+                    item.setForeground(col, QBrush(QColor("#ffffff")))
         if var.unreadable:
             danger = QBrush(QColor(theme.palette(self._dark)["danger"]))
             item.setForeground(2, danger)
