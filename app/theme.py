@@ -46,10 +46,10 @@ _TYPES_DARK = {
     "array": ("#453a0e", "#facc15"),
 }
 # สีประจำ stack frame (วนตามความลึก นับจาก main = 0)
-_FRAMES_LIGHT = ["#4f46e5", "#0d9488", "#c026d3", "#ea580c", "#0284c7", "#65a30d"]
+_FRAMES_LIGHT = ["#4f46e5", "#0f766e", "#a21caf", "#c2410c", "#0369a1", "#4d7c0f"]
 _FRAMES_DARK = ["#818cf8", "#2dd4bf", "#e879f9", "#fb923c", "#38bdf8", "#a3e635"]
 # ลูกศร pointer: ชี้ตัวแปรใน stack / ชี้ heap
-_ARROWS_LIGHT = {"stack": "#2563eb", "heap": "#ea580c"}
+_ARROWS_LIGHT = {"stack": "#2563eb", "heap": "#c2410c"}
 _ARROWS_DARK = {"stack": "#60a5fa", "heap": "#fb923c"}
 # ค่าที่เพิ่งเปลี่ยน: (พื้น, ขอบ/เรือง)
 _CHANGED_LIGHT = ("#fde047", "#d97706")

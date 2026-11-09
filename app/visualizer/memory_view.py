@@ -225,7 +225,7 @@ class MemoryView(QGraphicsView):
 
     def _draw_arrows(self, pending, max_x: float, bottom: float) -> None:
         heap_x = max_x + HEAP_GAP
-        heap_y = MARGIN
+        heap_y = MARGIN + CAPTION_H + GAP                       # ใต้แถบ legend
         lane = 0
         for var, src, _level in pending:
             if var.unreadable or not var.target:
