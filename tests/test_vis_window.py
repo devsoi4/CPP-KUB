@@ -186,3 +186,42 @@ def test_runner_problem_during_debug_ends_debug(dwin, fake_gdb, monkeypatch):
 def test_step_error_is_reported_and_actions_refreshed(dwin):
     dwin.debug_session.step_error.emit("Cannot finish")
     assert "Cannot finish" in console_text(dwin)
+
+
+# ---------- UI สำหรับสอนในห้องเรียน ----------
+def test_toolbar_is_simple_and_steps_live_in_panel(dwin):
+    shown = set(dwin.toolbar.actions())
+    assert {dwin.a_run, dwin.a_stop, dwin.a_debug, dwin.a_present} <= shown
+    for a in (dwin.a_step_over, dwin.a_step_into, dwin.a_step_out, dwin.a_continue, dwin.a_print):
+        assert a not in shown
+    v = dwin.visualizer
+    assert not v.btn_over.isEnabled() and not v.btn_into.isEnabled() and not v.btn_out.isEnabled()
+    assert v.btn_stop.isEnabled() and v.btn_restart.isEnabled()
+
+
+def test_presentation_mode_hides_chrome_and_restores_font(dwin):
+    before = dwin._font_size
+    dwin.show()
+    dwin.a_present.trigger()
+    assert dwin._presenting and dwin.menuBar().isHidden() and dwin.statusBar().isHidden()
+    assert dwin.explorer_card.isHidden()
+    assert dwin._font_size == before + dwin.PRESENT_BOOST
+    dwin.a_present.trigger()
+    assert not dwin._presenting and not dwin.menuBar().isHidden() and not dwin.statusBar().isHidden()
+    assert dwin._font_size == before
+    assert dwin.settings.value("font_size", before, type=int) in (before,)   # ไม่ถูกบันทึกค่าชั่วคราว
+
+
+@needs_gpp
+def test_step_counter_explanation_and_restart(dwin, fake_gdb):
+    set_code(dwin, LOOP_SRC)
+    dwin.start_debug()
+    assert wait_until(lambda: dwin.editor.debug_line == 3)
+    v = dwin.visualizer
+    assert v.step_label.text() == "ขั้นที่ 1"
+    assert v.btn_over.isEnabled() and not v.explain_label.isHidden()
+    v.btn_over.click()
+    assert wait_until(lambda: dwin.editor.debug_line == 4)
+    assert v.step_label.text() == "ขั้นที่ 2"
+    dwin.restart_debug()
+    assert wait_until(lambda: dwin._debugging and dwin.editor.debug_line == 3 and v.step_label.text() == "ขั้นที่ 1")

@@ -19,6 +19,8 @@ _BODIES = {
     "file": f'<g {_STROKE}><path d="M6 3h8l4 4v14H6z"/></g>',
     "close": f'<g {_STROKE}><path d="M6 6l12 12M18 6L6 18"/></g>',
     "moon": f'<g {_STROKE}><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></g>',
+    "present": f'<g {_STROKE}><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 21h8M12 16v5"/></g>',
+    "bug": f'<g {_STROKE}><rect x="8" y="8" width="8" height="12" rx="4"/><path d="M9 8a3 3 0 0 1 6 0M4 13h4M16 13h4M5 7l3 3M19 7l-3 3M5 20l3-3M19 20l-3-3"/></g>',
     "example": f'<g {_STROKE}><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1 2.5h6c0-1.1.4-1.9 1-2.5A6 6 0 0 0 12 3z"/></g>',
 }
 
@@ -36,7 +38,7 @@ def _render(name: str, color: str, size: int) -> QImage:
     return img
 
 
-def icon(name: str, color: str, size: int = 20) -> QIcon:
+def icon(name: str, color: str, size: int = 24) -> QIcon:
     return QIcon(QPixmap.fromImage(_render(name, color, size)))
 
 

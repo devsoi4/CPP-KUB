@@ -4,7 +4,7 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QBrush, QColor
 from PySide6.QtWidgets import (
-    QLabel, QListWidget, QSplitter, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
+    QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QSplitter, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
 
 from .. import theme
@@ -17,6 +17,11 @@ UNREADABLE_TEXT = "อ่านไม่ได้"
 
 class VisualizerPanel(QWidget):
     frame_selected = Signal(int)          # ผู้ใช้คลิกเฟรมใน call stack → ส่งเลขบรรทัดของเฟรมนั้น
+    step_over_requested = Signal()
+    step_into_requested = Signal()
+    step_out_requested = Signal()
+    stop_requested = Signal()
+    restart_requested = Signal()
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -36,16 +41,68 @@ class VisualizerPanel(QWidget):
         self.variables.setRootIsDecorated(True)
         self.variables.setUniformRowHeights(True)
         self.split = QSplitter(Qt.Vertical)
-        self.split.addWidget(self.stack)
+        self.split.addWidget(self._section("Call stack", self.stack))
         self.memory = MemoryView()
-        self.split.addWidget(self.variables)
+        self.split.addWidget(self._section("ตัวแปรในเฟรมปัจจุบัน", self.variables))
         self.split.addWidget(self.memory)
+        self.explain_label = QLabel("")
+        self.explain_label.setObjectName("ExplainBox")
+        self.explain_label.setWordWrap(True)
+        self.explain_label.hide()
+        # แถบปุ่มท้ายแผง (ใหญ่ อ่านชัด) + ตัวนับขั้น
+        self.btn_over = self._button("ข้ามบรรทัด  F10", self.step_over_requested)
+        self.btn_into = self._button("เข้าฟังก์ชัน  F11", self.step_into_requested)
+        self.btn_out = self._button("ออกจากฟังก์ชัน", self.step_out_requested)
+        self.btn_stop = self._button("หยุดเล่น", self.stop_requested)
+        self.btn_restart = self._button("เริ่มใหม่", self.restart_requested)
+        self.step_label = QLabel("")
+        self.step_label.setObjectName("StepCounter")
+        bar = QHBoxLayout()
+        bar.setContentsMargins(8, 6, 8, 8)
+        bar.setSpacing(6)
+        for b in (self.btn_over, self.btn_into, self.btn_out, self.btn_stop, self.btn_restart):
+            bar.addWidget(b)
+        bar.addStretch(1)
+        bar.addWidget(self.step_label)
+        self.set_stepping_enabled(False)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
         lay.addWidget(self.info_label)
         lay.addWidget(self.loop_label)
         lay.addWidget(self.split, 1)
+        lay.addWidget(self.explain_label)
+        lay.addLayout(bar)
+
+    @staticmethod
+    def _section(title: str, widget: QWidget) -> QWidget:
+        box = QWidget()
+        lay = QVBoxLayout(box)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        head = QLabel(title)
+        head.setObjectName("SectionTitle")
+        lay.addWidget(head)
+        lay.addWidget(widget, 1)
+        return box
+
+    def _button(self, text: str, signal) -> QPushButton:
+        b = QPushButton(text)
+        b.setObjectName("StepButton")
+        b.clicked.connect(lambda: signal.emit())
+        return b
+
+    def set_stepping_enabled(self, enabled: bool) -> None:
+        """ปุ่มก้าวเดินใช้ได้เมื่อโปรแกรมหยุดรอ (หยุดเล่น/เริ่มใหม่ ใช้ได้ตลอดที่ดีบักอยู่)"""
+        for b in (self.btn_over, self.btn_into, self.btn_out):
+            b.setEnabled(enabled)
+
+    def set_step(self, n: int) -> None:
+        self.step_label.setText(f"ขั้นที่ {n}" if n > 0 else "")
+
+    def set_explanation(self, text: str) -> None:
+        self.explain_label.setText(text)
+        self.explain_label.setVisible(bool(text))
 
     # ---------- สาธารณะ ----------
     def show_snapshot(self, snap: Snapshot) -> None:
@@ -65,9 +122,19 @@ class VisualizerPanel(QWidget):
             self.info_label.setText("")
         self.stack.blockSignals(True)
         self.stack.clear()
-        for fr in snap.frames:
+        for i, fr in enumerate(snap.frames):
             args = ", ".join(f"{v.name}={v.value}" for v in fr.args)
-            self.stack.addItem(f"{fr.func}({args})  บรรทัด {fr.line}")
+            here = "    ◄ อยู่ที่นี่" if i == 0 else ""
+            item = QListWidgetItem(f"{fr.func}({args})  บรรทัด {fr.line}{here}")
+            color = QColor(theme.frame_color(self._dark, len(snap.frames) - 1 - i))   # main = 0 ตรงกับภาพหน่วยความจำ
+            item.setForeground(QBrush(color))
+            tint = QColor(color)
+            tint.setAlpha(46)
+            item.setBackground(QBrush(tint))
+            f = item.font()
+            f.setBold(i == 0)
+            item.setFont(f)
+            self.stack.addItem(item)
         if snap.frames:
             self.stack.setCurrentRow(0)
         self.stack.blockSignals(False)
@@ -96,6 +163,8 @@ class VisualizerPanel(QWidget):
         self.memory.clear()
         self.info_label.setText("")
         self.set_loops([], {})
+        self.set_explanation("")
+        self.set_step(0)
 
     def set_zoom(self, font_size: int) -> None:
         """ขยายภาพหน่วยความจำ/ตารางตัวแปร/call stack ตามขนาดตัวอักษรของตัวแก้ไข (ฐาน 13pt = ปกติ)"""
@@ -103,6 +172,10 @@ class VisualizerPanel(QWidget):
         for w in (self.variables, self.stack):
             f = w.font()
             f.setPointSize(max(8, round(font_size * 0.85)))
+            w.setFont(f)
+        for w in (self.explain_label, self.btn_over, self.btn_into, self.btn_out, self.btn_stop, self.btn_restart):
+            f = w.font()
+            f.setPointSize(max(9, round(font_size * 0.9)))
             w.setFont(f)
 
     def set_dark(self, dark: bool) -> None:

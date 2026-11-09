@@ -128,12 +128,12 @@ QMenu::separator {{ height:1px; background:{border}; margin:5px 8px; }}
 QMenu::indicator {{ width:14px; height:14px; margin-left:4px; }}
 QToolBar {{ background:transparent; border:0; spacing:4px; padding:4px 8px 6px 8px; }}
 QToolBar::separator {{ width:1px; background:{border}; margin:6px 6px; }}
-QToolButton {{ background:transparent; border:0; border-radius:7px; padding:5px 10px; color:{text}; }}
+QToolButton {{ background:transparent; border:0; border-radius:9px; padding:7px 12px; color:{text}; font-size:10.5pt; }}
 QToolButton:hover {{ background:{hover}; }}
 QToolButton:pressed {{ background:{border}; }}
 QToolButton:checked {{ background:{tab_active}; }}
 QToolButton:disabled {{ color:{muted}; }}
-QToolButton#RunButton {{ background:{run}; color:{run_text}; font-weight:600; padding:6px 18px; border-radius:15px; }}
+QToolButton#RunButton {{ background:{run}; color:{run_text}; font-weight:700; padding:8px 24px; border-radius:18px; }}
 QToolButton#RunButton:hover {{ background:{run_hover}; }}
 QToolButton#RunButton:disabled {{ background:{hover}; color:{muted}; }}
 QToolButton#StopButton:enabled {{ color:{danger}; }}
@@ -142,6 +142,10 @@ QToolButton#StopButton:enabled:hover {{ background:{hover}; }}
 /* ---------- การ์ด (Explorer / โค้ด / แผงล่าง) ---------- */
 #Card, #VisualizerPanel {{ background:{bg}; border:1px solid {border}; border-radius:14px; }}
 #VisualizerPanel > QLabel {{ background:transparent; padding:8px 10px 4px 10px; color:{muted}; }}
+#SectionTitle {{ background:transparent; color:{muted}; font-weight:600; padding:8px 12px 4px 12px; }}
+#ExplainBox {{ background:{tab_active}; color:{text}; border-radius:12px; margin:6px 10px 0 10px; padding:10px 14px; }}
+#StepCounter {{ background:transparent; color:{muted}; font-weight:600; padding:0 6px; }}
+QPushButton#StepButton {{ padding:8px 14px; border-radius:10px; font-weight:600; }}
 QSplitter::handle {{ background:{border}; }}
 QSplitter#ShellSplit::handle {{ background:transparent; }}
 QSplitter#ShellSplit::handle:hover {{ background:{tab_active}; border-radius:3px; }}

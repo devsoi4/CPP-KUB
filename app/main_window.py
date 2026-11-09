@@ -4,7 +4,7 @@ from __future__ import annotations
 import html
 from pathlib import Path
 
-from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSettings, QSize, Qt
+from PySide6.QtCore import QEasingCurve, QPropertyAnimation, QSettings, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QApplication, QFileDialog, QFrame, QGraphicsOpacityEffect, QHBoxLayout, QLabel, QListWidgetItem, QMainWindow, QMessageBox,
@@ -15,10 +15,11 @@ from . import icons, printing, textio, theme
 from .compiler import Runner, describe_exit, find_compiler
 from .console import ConsoleWidget
 from .document import Document
-from .examples import DEFAULT_CODE, EXAMPLES
+from .examples import DEFAULT_CODE, EXAMPLES, annotations_for
 from .sidebar import ActivityBar, Explorer
 from .tabs import DocumentTabs
 from .toast import Toast
+from .visualizer.explain import explain
 from .visualizer.loops import LoopTracker, find_loops
 from .visualizer.model import describe_signal
 from .visualizer.panel import VisualizerPanel
@@ -46,7 +47,12 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.settings = QSettings(APP_NAME, APP_NAME)
         self.dark = self.settings.value("dark", False, type=bool)
-        self._font_size = self.settings.value("font_size", 13, type=int)
+        self._font_size = self.settings.value("font_size", 14, type=int)
+        self._presenting = False
+        self._pre_present: dict = {}
+        self._prev_snap = None
+        self._step_no = 0
+        self._annotations: dict[int, str] = {}
         self._run_doc: Document | None = None      # เอกสารที่รันล่าสุด (ใช้ระบายสีบรรทัด/กระโดดไปบรรทัดที่ผิด)
         self._run_preset: tuple[str, bool] = ("", False)
         self._shown_doc: Document | None = None    # เอกสารที่เจ้าของข้อมูลล่วงหน้าตอนนี้อยู่ในแผงล่าง
@@ -118,7 +124,8 @@ class MainWindow(QMainWindow):
             self._add_doc(DEFAULT_CODE)
         cc = find_compiler()
         if cc:
-            self._status(f"พร้อมใช้งาน — คอมไพเลอร์: {cc}", "ok")
+            self._status("พร้อมแล้ว — กดปุ่ม ▶ รัน (F5) เพื่อเริ่ม", "ok")
+            QTimer.singleShot(700, self._welcome_once)
         else:
             self._status("ไม่พบตัวคอมไพล์ g++ (ดูวิธีแก้ในปุ่ม รัน)", "error")
 
@@ -161,11 +168,11 @@ class MainWindow(QMainWindow):
         self.a_print_out = self._act("พิมพ์ผลลัพธ์...", self.print_output)
         self.a_pdf = self._act("ส่งออกโค้ดเป็น PDF...", self.export_code_pdf)
         self.a_quit = self._act("ออกจากโปรแกรม", self.close, "Ctrl+Q")
-        self.a_run = self._act("รัน (F5)", self.run_code, "F5", "คอมไพล์และรันโปรแกรม")
-        self.a_stop = self._act("หยุด", self.stop_run, "Shift+F5", "หยุดโปรแกรมที่กำลังรัน")
+        self.a_run = self._act("รัน", self.run_code, "F5", "คอมไพล์และรันโปรแกรม (F5)")
+        self.a_stop = self._act("หยุด", self.stop_run, "Shift+F5", "หยุดโปรแกรมที่กำลังรัน (Shift+F5)")
         self.a_stop.setEnabled(False)
-        self.a_debug = self._act("ดีบัก (F9)", self.start_debug, "F9",
-                                 "เริ่มดีบัก: เดินโปรแกรมทีละบรรทัดและดูค่าตัวแปร")
+        self.a_debug = self._act("ดูทีละบรรทัด", self.start_debug, "F9",
+                                 "เริ่มดีบัก (F9): เดินโปรแกรมทีละบรรทัดและดูค่าตัวแปร")
         self.a_step_over = self._act("ข้ามบรรทัด (F10)", lambda: self._debug_step(self.debug_session.step_over),
                                      "F10", "ทำบรรทัดนี้แล้วไปบรรทัดถัดไป (ไม่เข้าไปในฟังก์ชัน)")
         self.a_step_into = self._act("เข้าฟังก์ชัน (F11)", lambda: self._debug_step(self.debug_session.step_into),
@@ -182,13 +189,19 @@ class MainWindow(QMainWindow):
         self.a_toggle_explorer = self._act("แสดง/ซ่อน Explorer", self.activity.explorer_btn.toggle, "Ctrl+B")
         self.a_zoom_in = self._act("ขยายตัวอักษร", lambda: self._zoom(+1), "Ctrl+=")
         self.a_zoom_out = self._act("ลดตัวอักษร", lambda: self._zoom(-1), "Ctrl+-")
+        self.a_present = self._act("โหมดนำเสนอ", self._toggle_presentation, "F12",
+                                   "ซ่อนเมนู/แถบข้างและขยายตัวอักษรสำหรับฉายจอ (F12)")
+        self.a_present.setCheckable(True)
         self.a_dark = self._act("ธีมมืด", self._toggle_dark, tip="สลับธีมสว่าง/มืด")
         self.a_dark.setCheckable(True)
         self.a_dark.setChecked(self.dark)
         self.a_clear = self._act("ล้างหน้าต่างผลลัพธ์", self.console.clear)
         self.a_about = self._act("เกี่ยวกับโปรแกรม", self._about)
-        for a in (self.a_next_tab, self.a_prev_tab):
-            self.addAction(a)       # ไม่อยู่ในเมนู แต่ต้องให้คีย์ลัดทำงาน
+        # เพิ่มเข้าหน้าต่างด้วย: คีย์ลัดต้องทำงานแม้เมนู/แถบเครื่องมือถูกซ่อน (โหมดนำเสนอ) หรือไม่ได้อยู่ในเมนู
+        for a in (self.a_next_tab, self.a_prev_tab, self.a_run, self.a_stop, self.a_debug, self.a_step_over,
+                  self.a_step_into, self.a_step_out, self.a_continue, self.a_save, self.a_present,
+                  self.a_zoom_in, self.a_zoom_out, self.a_new, self.a_open, self.a_close_tab):
+            self.addAction(a)
 
     def _build_menus(self) -> None:
         mb = self.menuBar()
@@ -221,7 +234,7 @@ class MainWindow(QMainWindow):
         for title, code in EXAMPLES:
             m.addAction(title, lambda c=code, t=title: self.load_example(t, c))
         m = mb.addMenu("มุมมอง")
-        for a in (self.a_toggle_explorer, self.a_zoom_in, self.a_zoom_out, self.a_dark):
+        for a in (self.a_toggle_explorer, self.a_zoom_in, self.a_zoom_out, self.a_present, self.a_dark):
             m.addAction(a)
         mb.addMenu("ช่วยเหลือ").addAction(self.a_about)
 
@@ -232,28 +245,26 @@ class MainWindow(QMainWindow):
         self.addToolBar(self.toolbar)
         self.toolbar.addAction(self.a_run)
         self.toolbar.addAction(self.a_stop)
-        self.toolbar.addSeparator()
-        for a in (self.a_debug, self.a_step_over, self.a_step_into, self.a_step_out, self.a_continue):
-            self.toolbar.addAction(a)
+        self.toolbar.addAction(self.a_debug)
         self.toolbar.addSeparator()
         self.toolbar.addAction(self.a_save)
-        self.toolbar.addAction(self.a_print)
         spacer = QWidget()
         spacer.setStyleSheet("background:transparent;")
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.toolbar.addWidget(spacer)
+        self.toolbar.addAction(self.a_present)
         self.toolbar.addAction(self.a_dark)
         self.toolbar.widgetForAction(self.a_run).setObjectName("RunButton")
         self.toolbar.widgetForAction(self.a_stop).setObjectName("StopButton")
-        self.toolbar.setIconSize(QSize(16, 16))
-        for a in (self.a_save, self.a_print, self.a_dark):
+        self.toolbar.setIconSize(QSize(22, 22))
+        for a in (self.a_save, self.a_present, self.a_dark):
             self.toolbar.widgetForAction(a).setToolButtonStyle(Qt.ToolButtonIconOnly)
 
     def _refresh_icons(self) -> None:
         p = theme.palette(self.dark)
         for action, name, color in ((self.a_run, "run", p["run_text"]), (self.a_stop, "stop", p["danger"]),
                                     (self.a_save, "save", p["text"]), (self.a_print, "print", p["text"]),
-                                    (self.a_dark, "moon", p["text"])):
+                                    (self.a_present, "present", p["text"]), (self.a_debug, "bug", p["text"]), (self.a_dark, "moon", p["text"])):
             action.setIcon(icons.icon(name, color))
 
     def _connect_signals(self) -> None:
@@ -265,6 +276,12 @@ class MainWindow(QMainWindow):
         r.output.connect(self.console.append_out)
         r.run_finished.connect(self._on_run_finished)
         self.visualizer.frame_selected.connect(self._on_debug_frame_selected)
+        v = self.visualizer
+        v.step_over_requested.connect(self.a_step_over.trigger)     # trigger() ไม่ทำอะไรเมื่อ action ถูกปิดอยู่
+        v.step_into_requested.connect(self.a_step_into.trigger)
+        v.step_out_requested.connect(self.a_step_out.trigger)
+        v.stop_requested.connect(self.stop_run)
+        v.restart_requested.connect(self.restart_debug)
         d = self.debug_session
         d.stopped.connect(self._on_debug_stopped)
         d.output.connect(self.console.append_out)
@@ -475,8 +492,17 @@ class MainWindow(QMainWindow):
         doc.editor.clear_diagnostics()
         doc.editor.set_debug_mode(True)
         self._loop_tracker = LoopTracker(find_loops(doc.editor.toPlainText()))
+        self._prev_snap, self._step_no = None, 0
+        self._annotations = annotations_for(doc.editor.toPlainText())
         self._update_debug_actions()
         self.debug_session.start(doc.editor.toPlainText(), self.console.preset_text())
+
+    def restart_debug(self) -> None:
+        """เริ่มดีบักใหม่ตั้งแต่ต้น (หยุดรอบเดิมก่อน)"""
+        if not self._debugging:
+            return
+        self.stop_run()
+        QTimer.singleShot(150, self.start_debug)
 
     def _debug_step(self, step) -> None:
         step()
@@ -487,6 +513,7 @@ class MainWindow(QMainWindow):
         live = self._debugging and s.active and not s.busy
         for a in (self.a_step_over, self.a_step_into, self.a_step_out, self.a_continue):
             a.setEnabled(live)
+        self.visualizer.set_stepping_enabled(live)
 
     def _on_debug_stopped(self, snap) -> None:
         doc = self._debug_doc
@@ -494,6 +521,11 @@ class MainWindow(QMainWindow):
             return
         self.visualizer.show_snapshot(snap)
         self.visualizer.show()
+        self._step_no += 1
+        self.visualizer.set_step(self._step_no)
+        self.visualizer.set_explanation(
+            explain(self._prev_snap, snap, None if snap.exited else self._annotations.get(snap.line)))
+        self._prev_snap = snap
         if snap.exited or not snap.frames:
             doc.editor.set_debug_line(None)
             self.visualizer.set_loops([], {})
@@ -555,6 +587,7 @@ class MainWindow(QMainWindow):
         self.visualizer.clear()
         self.visualizer.hide()
         self._loop_tracker.reset()
+        self._prev_snap, self._step_no = None, 0
         self._set_busy(False)
         self._update_debug_actions()
         self._status("จบการดีบัก", "idle")
@@ -769,12 +802,42 @@ class MainWindow(QMainWindow):
 
     # ---------- มุมมอง ----------
     def _zoom(self, delta: int) -> None:
-        self._font_size = max(8, min(40, self._font_size + delta))
+        self._set_font_size(self._font_size + delta, persist=not self._presenting)
+
+    def _set_font_size(self, size: int, persist: bool = True) -> None:
+        self._font_size = max(8, min(40, size))
         for d in self.tabs.documents():
             d.editor.set_font_size(self._font_size)
         self.console.set_font_size(max(10, self._font_size - 1))
         self.visualizer.set_zoom(self._font_size)
-        self.settings.setValue("font_size", self._font_size)
+        if persist:
+            self.settings.setValue("font_size", self._font_size)
+
+    PRESENT_BOOST = 6
+
+    def _toggle_presentation(self) -> None:
+        """โหมดนำเสนอ: ซ่อนเมนู/แถบข้าง/แถบสถานะ และขยายตัวอักษรเพื่อฉายจอ — ไม่บันทึกขนาดลงการตั้งค่า"""
+        on = not self._presenting
+        self._presenting = on
+        self.a_present.setChecked(on)
+        if on:
+            self._pre_present = {"font": self._font_size}
+            self.menuBar().hide()
+            self.statusBar().hide()
+            self.activity.hide()
+            self.explorer_card.hide()
+            self._set_font_size(self._font_size + self.PRESENT_BOOST, persist=False)
+        else:
+            self.menuBar().show()
+            self.statusBar().show()
+            self.activity.show()
+            self.explorer_card.setVisible(self.activity.explorer_btn.isChecked())
+            self._set_font_size(self._pre_present.get("font", self._font_size), persist=False)
+
+    def _welcome_once(self) -> None:
+        if not self.settings.value("seen_welcome", False, type=bool):
+            self.settings.setValue("seen_welcome", True)
+            self.toast.show_message("เริ่มต้น: เลือกโค้ดจากเมนู “ตัวอย่างโค้ด” แล้วกดปุ่ม รัน", "info", 6000)
 
     def _toggle_dark(self) -> None:
         self.dark = self.a_dark.isChecked()
@@ -844,7 +907,7 @@ class MainWindow(QMainWindow):
         cur = self.doc
         self.settings.setValue("session/paths", [str(d.path) for d in docs])
         self.settings.setValue("session/active", str(cur.path) if cur is not None and cur.path else "")
-        self.settings.setValue("explorer/visible", self.activity.explorer_btn.isChecked())
+        self.settings.setValue("explorer/visible", self.activity.explorer_btn.isChecked())   # ปุ่มคงสถานะจริงแม้กำลังซ่อนในโหมดนำเสนอ
         self.settings.setValue("explorer/folder", self.explorer.folder or "")
 
     def _restore_session(self) -> bool:
